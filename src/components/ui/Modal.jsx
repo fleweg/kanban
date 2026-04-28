@@ -37,10 +37,14 @@ export function Modal({ open, onClose, title, description, children, footer, siz
         aria-modal="true"
         className={cn(
           "relative w-full bg-white rounded-2xl shadow-pop ring-1 ring-surface-200 animate-scale-in dark:bg-surface-900 dark:ring-surface-700",
+          // Constrain to the viewport and let the body scroll. Header and
+          // footer stay anchored so action buttons remain reachable on tall
+          // content (long forms, long comment threads).
+          "flex flex-col max-h-[90vh]",
           sizes[size],
         )}
       >
-        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3">
+        <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-3 shrink-0">
           <div>
             {title && <h2 className="text-base font-semibold text-surface-900 dark:text-surface-50">{title}</h2>}
             {description && <p className="mt-0.5 text-sm text-surface-500 dark:text-surface-400">{description}</p>}
@@ -54,9 +58,9 @@ export function Modal({ open, onClose, title, description, children, footer, siz
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 pb-5">{children}</div>
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-5">{children}</div>
         {footer && (
-          <div className="flex items-center justify-end gap-2 px-6 py-3.5 bg-surface-50/60 rounded-b-2xl border-t border-surface-100 dark:bg-surface-950/40 dark:border-surface-800">
+          <div className="flex items-center justify-end gap-2 px-6 py-3.5 bg-surface-50/60 rounded-b-2xl border-t border-surface-100 dark:bg-surface-950/40 dark:border-surface-800 shrink-0">
             {footer}
           </div>
         )}

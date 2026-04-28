@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
-import { PRIORITIES, formatDateTime } from "../../lib/utils";
+import { cn, PRIORITIES, formatDateTime } from "../../lib/utils";
 import { createTicket, deleteTicket, updateTicket } from "../../services/tickets";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
@@ -38,6 +38,7 @@ export function TicketModal({
   const [form, setForm] = useState(blank);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState("details");
 
   useEffect(() => {
     if (!open) return;
@@ -55,6 +56,7 @@ export function TicketModal({
       setForm({ ...blank, type: defaultType, status: defaultStatus });
     }
     setError(null);
+    setActiveTab("details");
   }, [open, ticket, defaultStatus, defaultType]);
 
   const isEpicForm = form.type === EPIC_TYPE;
@@ -71,6 +73,7 @@ export function TicketModal({
     e.preventDefault();
     if (!form.title.trim()) {
       setError("Title is required.");
+      setActiveTab("details");
       return;
     }
     setSubmitting(true);
@@ -125,6 +128,7 @@ export function TicketModal({
   }
 
   const creator = isEdit ? getUserById(ticket.createdBy) : null;
+  const commentCount = ticket?.commentCount ?? 0;
   const modalTitle = isEdit
     ? isEpicForm
       ? "Edit epic"
@@ -174,131 +178,190 @@ export function TicketModal({
         </>
       }
     >
-      <form id="ticket-form" onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="label" htmlFor="ticket-title">
-            Title
-          </label>
-          <input
-            id="ticket-title"
-            className="input"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            placeholder="What needs to be done?"
-            autoFocus
-          />
-        </div>
+      {isEdit && (
+        <Tabs
+          activeTab={activeTab}
+          onChange={setActiveTab}
+          commentCount={commentCount}
+        />
+      )}
 
-        <div>
-          <label className="label" htmlFor="ticket-description">
-            Description
-          </label>
-          <textarea
-            id="ticket-description"
-            className="input min-h-[110px] resize-y"
-            value={form.description}
-            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-            placeholder="Add context, acceptance criteria, links…"
-          />
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="label" htmlFor="ticket-type">
-              Type
-            </label>
-            <TypePicker value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="ticket-priority">
-              Priority
-            </label>
-            <select
-              id="ticket-priority"
-              className="input"
-              value={form.priority}
-              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="label" htmlFor="ticket-assignee">
-              Assignee
-            </label>
-            <UserPicker
-              value={form.assigneeId}
-              onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
-            />
-          </div>
-
-          {!isEpicForm && (
-            <div>
-              <label className="label" htmlFor="ticket-epic">
-                Epic
-              </label>
-              <EpicPicker value={form.epicId} onChange={(v) => setForm((f) => ({ ...f, epicId: v }))} />
-            </div>
-          )}
-
-          {!isEpicForm && isEdit && ticket?.sprintId && workflow?.columns?.length > 0 && (
-            <div>
-              <label className="label" htmlFor="ticket-status">
-                Status
-              </label>
-              <select
-                id="ticket-status"
-                className="input"
-                value={form.status ?? ""}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-              >
-                {workflow.columns.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
-        {isEdit && (
-          <div className="flex items-center gap-2 pt-2 text-xs text-surface-500 dark:text-surface-400">
-            {creator ? (
-              <>
-                <UserAvatar user={creator} size="xs" />
-                <span>
-                  Created by <span className="text-surface-700 dark:text-surface-200">{creator.email}</span>
-                  {ticket.createdAt && <> &middot; {formatDateTime(ticket.createdAt)}</>}
-                </span>
-              </>
-            ) : (
-              <span>
-                Created
-                {ticket.createdAt && <> {formatDateTime(ticket.createdAt)}</>}
-              </span>
-            )}
-          </div>
-        )}
-
-        {error && (
-          <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
-            {error}
-          </div>
-        )}
-      </form>
+      {/* Both panes stay mounted so the form is always submittable from the
+          footer button (it lives outside this body), and so the comment
+          subscription doesn't tear down when switching tabs. The inactive
+          pane is hidden via display:none. */}
+      <div className={cn(isEdit && activeTab !== "details" && "hidden")}>
+        <DetailsForm
+          form={form}
+          setForm={setForm}
+          onSubmit={handleSubmit}
+          isEdit={isEdit}
+          isEpicForm={isEpicForm}
+          ticket={ticket}
+          workflow={workflow}
+          creator={creator}
+          error={error}
+        />
+      </div>
 
       {isEdit && (
-        <div className="mt-6 pt-5 border-t border-surface-200 dark:border-surface-700">
+        <div className={cn(activeTab !== "comments" && "hidden")}>
           <CommentList ticketId={ticket.id} />
         </div>
       )}
     </Modal>
+  );
+}
+
+function Tabs({ activeTab, onChange, commentCount }) {
+  const items = [
+    { id: "details", label: "Details" },
+    { id: "comments", label: commentCount > 0 ? `Comments (${commentCount})` : "Comments" },
+  ];
+  return (
+    <div className="flex gap-4 -mx-6 px-6 mb-5 border-b border-surface-200 dark:border-surface-700">
+      {items.map((it) => {
+        const active = activeTab === it.id;
+        return (
+          <button
+            key={it.id}
+            type="button"
+            onClick={() => onChange(it.id)}
+            className={cn(
+              "py-2 -mb-px border-b-2 text-sm font-medium transition-colors",
+              active
+                ? "border-surface-900 text-surface-900 dark:border-surface-50 dark:text-surface-50"
+                : "border-transparent text-surface-500 hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-100",
+            )}
+          >
+            {it.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DetailsForm({ form, setForm, onSubmit, isEdit, isEpicForm, ticket, workflow, creator, error }) {
+  return (
+    <form id="ticket-form" onSubmit={onSubmit} className="space-y-4">
+      <div>
+        <label className="label" htmlFor="ticket-title">
+          Title
+        </label>
+        <input
+          id="ticket-title"
+          className="input"
+          value={form.title}
+          onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+          placeholder="What needs to be done?"
+          autoFocus
+        />
+      </div>
+
+      <div>
+        <label className="label" htmlFor="ticket-description">
+          Description
+        </label>
+        <textarea
+          id="ticket-description"
+          className="input min-h-[110px] resize-y"
+          value={form.description}
+          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          placeholder="Add context, acceptance criteria, links…"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="label" htmlFor="ticket-type">
+            Type
+          </label>
+          <TypePicker value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} />
+        </div>
+
+        <div>
+          <label className="label" htmlFor="ticket-priority">
+            Priority
+          </label>
+          <select
+            id="ticket-priority"
+            className="input"
+            value={form.priority}
+            onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+          >
+            {PRIORITIES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label" htmlFor="ticket-assignee">
+            Assignee
+          </label>
+          <UserPicker
+            value={form.assigneeId}
+            onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
+          />
+        </div>
+
+        {!isEpicForm && (
+          <div>
+            <label className="label" htmlFor="ticket-epic">
+              Epic
+            </label>
+            <EpicPicker value={form.epicId} onChange={(v) => setForm((f) => ({ ...f, epicId: v }))} />
+          </div>
+        )}
+
+        {!isEpicForm && isEdit && ticket?.sprintId && workflow?.columns?.length > 0 && (
+          <div>
+            <label className="label" htmlFor="ticket-status">
+              Status
+            </label>
+            <select
+              id="ticket-status"
+              className="input"
+              value={form.status ?? ""}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+            >
+              {workflow.columns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      {isEdit && (
+        <div className="flex items-center gap-2 pt-2 text-xs text-surface-500 dark:text-surface-400">
+          {creator ? (
+            <>
+              <UserAvatar user={creator} size="xs" />
+              <span>
+                Created by <span className="text-surface-700 dark:text-surface-200">{creator.email}</span>
+                {ticket.createdAt && <> &middot; {formatDateTime(ticket.createdAt)}</>}
+              </span>
+            </>
+          ) : (
+            <span>
+              Created
+              {ticket.createdAt && <> {formatDateTime(ticket.createdAt)}</>}
+            </span>
+          )}
+        </div>
+      )}
+
+      {error && (
+        <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
+          {error}
+        </div>
+      )}
+    </form>
   );
 }
