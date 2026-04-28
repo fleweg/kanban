@@ -8,10 +8,30 @@ import { useAuth } from "../../context/AuthContext";
 import { UserAvatar } from "../users/UserAvatar";
 import { UserPicker } from "../users/UserPicker";
 import { CommentList } from "../comments/CommentList";
+import { TypeIcon } from "../issueTypes/TypeIcon";
+import { TypePicker } from "../issueTypes/TypePicker";
+import { EpicPicker } from "../epics/EpicPicker";
+import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
 
-const blank = { title: "", description: "", priority: "medium", assigneeId: null };
+const blank = {
+  title: "",
+  description: "",
+  priority: "medium",
+  assigneeId: null,
+  type: DEFAULT_ISSUE_TYPE,
+  epicId: null,
+  status: null,
+};
 
-export function TicketModal({ open, onClose, ticket, defaultSprintId = null, defaultStatus = null, workflow }) {
+export function TicketModal({
+  open,
+  onClose,
+  ticket,
+  defaultSprintId = null,
+  defaultStatus = null,
+  defaultType = DEFAULT_ISSUE_TYPE,
+  workflow,
+}) {
   const { user } = useAuth();
   const { getUserById } = useAppData();
   const isEdit = Boolean(ticket?.id);
@@ -28,12 +48,24 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
         priority: ticket.priority ?? "medium",
         status: ticket.status ?? null,
         assigneeId: ticket.assigneeId ?? null,
+        type: ticket.type ?? DEFAULT_ISSUE_TYPE,
+        epicId: ticket.epicId ?? null,
       });
     } else {
-      setForm({ ...blank, status: defaultStatus });
+      setForm({ ...blank, type: defaultType, status: defaultStatus });
     }
     setError(null);
-  }, [open, ticket, defaultStatus]);
+  }, [open, ticket, defaultStatus, defaultType]);
+
+  const isEpicForm = form.type === EPIC_TYPE;
+
+  // If the user changes the type to "epic" mid-edit, clear the irrelevant
+  // fields so the create/update payload is consistent with the data model.
+  useEffect(() => {
+    if (isEpicForm && (form.epicId || form.status)) {
+      setForm((f) => ({ ...f, epicId: null, status: null }));
+    }
+  }, [isEpicForm, form.epicId, form.status]);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -49,18 +81,26 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
           title: form.title,
           description: form.description,
           priority: form.priority,
-          status: form.status ?? null,
+          status: isEpicForm ? null : form.status ?? null,
           assigneeId: form.assigneeId ?? null,
+          type: form.type,
+          epicId: isEpicForm ? null : form.epicId ?? null,
         });
       } else {
         await createTicket({
           title: form.title,
           description: form.description,
           priority: form.priority,
-          sprintId: defaultSprintId,
-          status: defaultSprintId ? defaultStatus ?? workflow?.columns?.[0]?.id ?? null : null,
+          sprintId: isEpicForm ? null : defaultSprintId,
+          status: isEpicForm
+            ? null
+            : defaultSprintId
+              ? defaultStatus ?? workflow?.columns?.[0]?.id ?? null
+              : null,
           createdBy: user?.uid ?? null,
           assigneeId: form.assigneeId ?? null,
+          type: form.type,
+          epicId: isEpicForm ? null : form.epicId ?? null,
         });
       }
       onClose();
@@ -85,13 +125,32 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
   }
 
   const creator = isEdit ? getUserById(ticket.createdBy) : null;
+  const modalTitle = isEdit
+    ? isEpicForm
+      ? "Edit epic"
+      : "Edit ticket"
+    : isEpicForm
+      ? "New epic"
+      : "New ticket";
+  const submitLabel = isEdit ? "Save changes" : isEpicForm ? "Create epic" : "Create ticket";
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={isEdit ? "Edit ticket" : "New ticket"}
-      description={isEdit ? "Update ticket details." : "Add a new item to the backlog or current sprint."}
+      title={
+        <span className="inline-flex items-center gap-2">
+          <TypeIcon type={form.type} size="md" />
+          {modalTitle}
+        </span>
+      }
+      description={
+        isEdit
+          ? "Update details."
+          : isEpicForm
+            ? "Group multiple tickets under a higher-level container."
+            : "Add a new item to the backlog or current sprint."
+      }
       size={isEdit ? "xl" : "lg"}
       footer={
         <>
@@ -110,7 +169,7 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
             Cancel
           </button>
           <button type="submit" form="ticket-form" className="btn-primary" disabled={submitting}>
-            {submitting ? "Saving…" : isEdit ? "Save changes" : "Create ticket"}
+            {submitting ? "Saving…" : submitLabel}
           </button>
         </>
       }
@@ -145,6 +204,13 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
+            <label className="label" htmlFor="ticket-type">
+              Type
+            </label>
+            <TypePicker value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} />
+          </div>
+
+          <div>
             <label className="label" htmlFor="ticket-priority">
               Priority
             </label>
@@ -172,7 +238,16 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
             />
           </div>
 
-          {isEdit && ticket?.sprintId && workflow?.columns?.length > 0 && (
+          {!isEpicForm && (
+            <div>
+              <label className="label" htmlFor="ticket-epic">
+                Epic
+              </label>
+              <EpicPicker value={form.epicId} onChange={(v) => setForm((f) => ({ ...f, epicId: v }))} />
+            </div>
+          )}
+
+          {!isEpicForm && isEdit && ticket?.sprintId && workflow?.columns?.length > 0 && (
             <div>
               <label className="label" htmlFor="ticket-status">
                 Status

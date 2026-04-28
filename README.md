@@ -64,7 +64,7 @@ You don&apos;t need to create any collections by hand. The app creates them on f
 
 | Collection | Document shape |
 | --- | --- |
-| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, order, createdAt, updatedAt }` |
+| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, order, type, epicId, createdAt, updatedAt }` |
 | `tickets/{id}/comments` | `{ body, authorId, replyTo, edited, deleted, createdAt, updatedAt }` (subcollection) |
 | `sprints` | `{ name, goal, status: "active" \| "completed", createdAt, startedAt, endedAt }` |
 | `config` | Single document `workflow` containing `{ columns: [...], completedColumnId }` |
@@ -251,6 +251,24 @@ Tickets carry two user-related fields:
 - **`assigneeId`** — the `uid` of the assignee, or `null`. Editable from the ticket modal via an "Assignee" dropdown. Any active user can be picked, including the bootstrap admin. Tickets without an assignee show a dashed `?` placeholder on their card; assigned tickets show the assignee's avatar in the bottom-right corner.
 
 Tickets created before this feature was added simply have no assignee until someone edits them.
+
+### Issue types &amp; epics
+
+Each ticket carries a **type**: `task` (default), `bug`, `story`, or `epic`. The type catalog lives in [src/lib/issueTypes.js](src/lib/issueTypes.js); to add another type (e.g. `chore`), append an entry there with an icon (from `lucide-react`) and Tailwind color classes — no other change required.
+
+The type icon shows up in three places: at the start of the ticket title (on cards and in the modal), in the ticket modal's **Type** dropdown, and on the modal header next to the title. The type doesn't affect filtering or status flow today; it's purely a categorization aid.
+
+**Epics** are tickets with `type === "epic"`. They behave differently from regular tickets:
+
+- They **never appear in the backlog or on the Kanban board**. They live in their own page at `/epics`.
+- They cannot be placed in a sprint or in a workflow column (the modal hides the Sprint / Status fields when type is `epic`).
+- They cannot be nested under another epic — the **Epic** picker is hidden when type is `epic`.
+
+Other tickets can reference an epic via the `epicId` field, set from the **Epic** dropdown in the ticket modal. When set, the ticket's card shows a colored **epic chip** next to its priority — clicking the chip is a planned shortcut (today it just labels). Each epic gets a deterministic chip color based on its id, so distinct epics stand out from each other on the board.
+
+The **Epics page** (`/epics`) lists all epics as cards with a progress bar (`completed children / total children`, where "completed" matches the workflow's completion column). Click an epic to edit it via the standard ticket modal — comments, assignee, type, priority all work the same way.
+
+If an epic is deleted, its child tickets keep their (now dangling) `epicId`. The UI silently hides the broken chip; no cascade, no orphan cleanup. Recreating an epic with the same id is impossible (Firestore generates new ids), so this is effectively a one-way release.
 
 ### Drag &amp; drop ordering
 

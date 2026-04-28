@@ -61,6 +61,18 @@ Only one sprint can be `status: "active"` at a time. `createSprint` and `endSpri
 
 The Kanban columns are data, not code. [src/config/defaultWorkflow.json](src/config/defaultWorkflow.json) seeds the `config/workflow` Firestore doc; users edit it from the Settings page. `validateWorkflow` in [src/services/workflow.js](src/services/workflow.js) enforces unique column ids and that `completedColumnId` matches one of them. When a ticket's `status` references a column id that no longer exists (e.g. user renamed it), the board falls back to the first column — preserve that fallback rather than crashing.
 
+### Issue types & epics
+
+Tickets carry a `type` field (`task` / `bug` / `story` / `epic`, default `task`) and an optional `epicId`. The type catalog is hardcoded in [src/lib/issueTypes.js](src/lib/issueTypes.js) — single source of truth for label, icon (lucide-react), text color and chip classes. To add a type, append to `ISSUE_TYPES`; nothing else needs touching.
+
+**Epic = ticket with `type === "epic"`** — same collection, same comments, same rules. The model rejects `sprintId`, `status`, and `epicId` for epics at the service layer ([src/services/tickets.js](src/services/tickets.js)). [AppDataContext](src/context/AppDataContext.jsx) splits the global `tickets` array into `epics` and `nonEpicTickets`; the backlog and active sprint lists derive from `nonEpicTickets`, so epics naturally never reach the Kanban board.
+
+[EpicsPage](src/pages/EpicsPage.jsx) lives at `/epics`. It computes per-epic progress at render time by scanning all tickets — no denormalized counter (unlike `commentCount`) because the page is rarely viewed and the calculation is cheap. Each card opens the standard [TicketModal](src/components/tickets/TicketModal.jsx); the modal detects epic-type forms via `form.type === EPIC_TYPE` and conditionally hides Sprint/Status/Epic fields and switches the header label.
+
+Epic chip color is deterministic per epic id (same djb2 hash approach as user avatars), so each epic gets a stable distinct color across cards. [EpicChip](src/components/epics/EpicChip.jsx) holds the soft palette inline because Tailwind cannot generate dynamic class names.
+
+Deleting an epic leaves its children with a dangling `epicId`. The UI hides the broken chip (`getEpicById` returns null, `EpicChip` renders nothing). No cascade, no cleanup — admins can re-link manually if they want.
+
 ### Drag & drop ordering
 
 Tickets carry a numeric `order` field; both the Kanban board and the [BacklogPage](src/pages/BacklogPage.jsx) sort by it descending (highest = top). New tickets are created with `order = Date.now()` so they default to the top. The active sprint board ([KanbanBoard](src/components/kanban/KanbanBoard.jsx)) and the backlog list each have their own `DragDropContext` from `@hello-pangea/dnd`.

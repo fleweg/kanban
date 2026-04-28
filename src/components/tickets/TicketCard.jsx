@@ -2,11 +2,14 @@ import { GripVertical, MessageSquare, MoreHorizontal } from "lucide-react";
 import { cn, getPriority } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
+import { TypeIcon } from "../issueTypes/TypeIcon";
+import { EpicChip } from "../epics/EpicChip";
 
-export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compact }) {
+export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compact, onEpicClick }) {
   const priority = getPriority(ticket.priority);
-  const { getUserById } = useAppData();
+  const { getUserById, getEpicById } = useAppData();
   const assignee = getUserById(ticket.assigneeId);
+  const epic = getEpicById(ticket.epicId);
   const commentCount = ticket.commentCount ?? 0;
 
   return (
@@ -31,11 +34,21 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
           </span>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-surface-900 leading-snug line-clamp-2 dark:text-surface-50">
-            {ticket.title}
-          </p>
+          <div className="flex items-start gap-1.5">
+            <span className="mt-0.5">
+              <TypeIcon type={ticket.type} size="sm" />
+            </span>
+            <p className="text-sm font-medium text-surface-900 leading-snug line-clamp-2 dark:text-surface-50">
+              {ticket.title}
+            </p>
+          </div>
           {ticket.description && !compact && (
             <p className="text-xs text-surface-500 mt-1 line-clamp-2 dark:text-surface-400">{ticket.description}</p>
+          )}
+          {epic && (
+            <div className="mt-2">
+              <EpicChip epic={epic} onClick={onEpicClick} />
+            </div>
           )}
           <div className="mt-2.5 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">

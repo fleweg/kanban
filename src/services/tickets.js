@@ -10,6 +10,7 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { collections, getDb } from "./firebase";
+import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../lib/issueTypes";
 
 const ticketsCollection = () => collection(getDb(), collections.tickets);
 const ticketDoc = (id) => doc(getDb(), collections.tickets, id);
@@ -34,15 +35,22 @@ export async function createTicket({
   status = null,
   createdBy = null,
   assigneeId = null,
+  type = DEFAULT_ISSUE_TYPE,
+  epicId = null,
 }) {
+  // Epics are project-level containers — they never live in a sprint or in a
+  // workflow column, and they cannot belong to another epic.
+  const isEpicType = type === EPIC_TYPE;
   return addDoc(ticketsCollection(), {
     title: title.trim(),
     description: description.trim(),
     priority,
-    sprintId,
-    status,
+    sprintId: isEpicType ? null : sprintId,
+    status: isEpicType ? null : status,
     createdBy,
     assigneeId,
+    type,
+    epicId: isEpicType ? null : epicId,
     // Initial order = now, so newly created tickets land at the top of their
     // list (descending sort). Drag-reorder writes new midpoint values later.
     order: Date.now(),

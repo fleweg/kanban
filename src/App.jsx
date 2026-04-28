@@ -10,6 +10,7 @@ import { ActiveSprintPage } from "./pages/ActiveSprintPage";
 import { SprintsPage } from "./pages/SprintsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { EpicsPage } from "./pages/EpicsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ErrorScreen } from "./components/ErrorScreen";
 import { getAdminEmail, getMissingFirebaseEnvVars } from "./services/firebase";
@@ -79,6 +80,7 @@ function AuthenticatedShell() {
           <Route path="/sprint" element={<ActiveSprintPage />} />
           <Route path="/backlog" element={<BacklogPage />} />
           <Route path="/sprints" element={<SprintsPage />} />
+          <Route path="/epics" element={<EpicsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/users"

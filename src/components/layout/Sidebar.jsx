@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users } from "lucide-react";
+import { Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -9,6 +9,7 @@ const baseItems = [
   { to: "/backlog", label: "Backlog", icon: Inbox },
   { to: "/sprint", label: "Active Sprint", icon: LayoutGrid },
   { to: "/sprints", label: "Sprints", icon: Layers },
+  { to: "/epics", label: "Epics", icon: Crown },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
