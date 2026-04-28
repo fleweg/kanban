@@ -1,0 +1,10 @@
+{
+  "columns": [
+    { "id": "todo", "name": "To Do", "color": "#94a3b8" },
+    { "id": "in_progress", "name": "In Progress", "color": "#3b82f6" },
+    { "id": "freeze", "name": "Freeze", "color": "#06b6d4" },
+    { "id": "to_review", "name": "To Review", "color": "#a855f7" },
+    { "id": "in_production", "name": "In Production", "color": "#22c55e" }
+  ],
+  "completedColumnId": "in_production"
+}

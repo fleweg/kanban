@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f172a" />
+    <!-- Prevent Chrome / browser auto-translate from rewriting text nodes,
+         which conflicts with React reconciliation (see facebook/react#11538). -->
+    <meta name="google" content="notranslate" />
+    <title>Kanban — Sprints &amp; Backlog</title>
+    <script>
+      // Anti-FOUC: apply the saved theme synchronously, before React renders,
+      // so users in dark mode never see a flash of light content.
+      (function () {
+        try {
+          var stored = localStorage.getItem("theme");
+          var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme = stored === "dark" || stored === "light" ? stored : prefersDark ? "dark" : "light";
+          if (theme === "dark") document.documentElement.classList.add("dark");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

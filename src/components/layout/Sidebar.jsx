@@ -1,0 +1,79 @@
+import { NavLink } from "react-router-dom";
+import { Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users } from "lucide-react";
+import { cn } from "../../lib/utils";
+import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
+import { signOut } from "../../services/auth";
+
+const baseItems = [
+  { to: "/backlog", label: "Backlog", icon: Inbox },
+  { to: "/sprint", label: "Active Sprint", icon: LayoutGrid },
+  { to: "/sprints", label: "Sprints", icon: Layers },
+  { to: "/settings", label: "Settings", icon: Settings },
+];
+
+export function Sidebar() {
+  const { user, isAdmin } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const items = isAdmin ? [...baseItems, { to: "/users", label: "Users", icon: Users }] : baseItems;
+  const isDark = theme === "dark";
+
+  return (
+    <aside className="hidden md:flex md:flex-col w-60 shrink-0 border-r border-surface-200 bg-white dark:border-surface-800 dark:bg-surface-900">
+      <div className="px-5 h-16 flex items-center gap-2.5 border-b border-surface-200 dark:border-surface-800">
+        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-blue-500 to-violet-500 flex items-center justify-center shadow-card">
+          <LayoutGrid className="h-4 w-4 text-white" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold leading-none">Kanban</p>
+          <p className="text-[11px] text-surface-500 mt-0.5 dark:text-surface-400">Sprints &amp; Backlog</p>
+        </div>
+      </div>
+      <nav className="flex-1 px-3 py-4 space-y-0.5">
+        {items.map(({ to, label, icon: Icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-surface-900 text-white shadow-card dark:bg-surface-100 dark:text-surface-900"
+                  : "text-surface-600 hover:bg-surface-100 hover:text-surface-900 dark:text-surface-300 dark:hover:bg-surface-800 dark:hover:text-surface-50",
+              )
+            }
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="px-3 py-3 border-t border-surface-200 dark:border-surface-800">
+        {user && (
+          <div className="px-2 pb-2">
+            <p className="text-xs font-medium text-surface-700 truncate dark:text-surface-200">{user.email}</p>
+            <p className="text-[11px] text-surface-400 dark:text-surface-500">{isAdmin ? "Administrator" : "Member"}</p>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-surface-600 hover:bg-surface-100 hover:text-surface-900 transition-colors dark:text-surface-300 dark:hover:bg-surface-800 dark:hover:text-surface-50"
+          title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          <Sun className={cn("h-4 w-4", !isDark && "hidden")} />
+          <Moon className={cn("h-4 w-4", isDark && "hidden")} />
+          <span>{isDark ? "Light mode" : "Dark mode"}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-surface-600 hover:bg-surface-100 hover:text-surface-900 transition-colors dark:text-surface-300 dark:hover:bg-surface-800 dark:hover:text-surface-50"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign out
+        </button>
+      </div>
+    </aside>
+  );
+}
