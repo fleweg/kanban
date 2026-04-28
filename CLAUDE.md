@@ -73,6 +73,20 @@ Tickets carry `createdBy` (immutable, set on creation) and `assigneeId` (nullabl
 
 The bootstrap admin auto-creates their own `users/{uid}` record with `role: "user"` like everyone else (otherwise they couldn't be picked as an assignee). Their effective admin status still flows from the email match in `.env` + rules — the role field is irrelevant for the bootstrap admin. The Users page detects them by email and shows a "Bootstrap" badge, treats them as Admin, and disables destructive actions on their row.
 
+### Comments
+
+Each ticket has its own thread under the Firestore subcollection `tickets/{ticketId}/comments`. Subcollection (not an array on the ticket) so we don't hit the 1 MB doc limit and so listeners are scoped per-ticket — the board doesn't re-render when an unrelated ticket gets a comment.
+
+[src/services/comments.js](src/services/comments.js) handles the writes through `writeBatch` so each post atomically writes the comment **and** increments `tickets/{id}.commentCount`. The denormalized counter is what the [TicketCard](src/components/tickets/TicketCard.jsx) reads to render the `💬 N` badge — no extra subscription per card.
+
+[CommentList](src/components/comments/CommentList.jsx) subscribes via `onSnapshot` only when its ticket modal is open (subscription cleaned up on unmount). It groups top-level comments with their replies via the `replyTo` field. Threading is intentionally **one level deep**: the "Reply" action is hidden on already-reply comments. Replies whose parent has been deleted bubble up as top-level so they stay visible.
+
+Deletion is **soft** (set `deleted: true`, blank `body`) so replies pointing to the deleted comment keep their context. The UI shows `[deleted]`. The counter is decremented in the same batch. There's no hard-delete path; the Firestore rules forbid `delete` entirely.
+
+URLs in bodies are turned into clickable links via `tokenizeForLinks` in [src/lib/utils.js](src/lib/utils.js). There is **no markdown** — keeps XSS surface minimal and avoids a parser dependency.
+
+Permissions: any active user can read comments and post their own; updates allowed for the author or any admin (covers both edit and soft-delete since both go through `update`).
+
 ### Routing & layout
 
 [src/App.jsx](src/App.jsx) wraps everything in `AppErrorBoundary` → `AppDataProvider` → `Routes`. Default route redirects to `/sprint`. All authenticated pages render inside [src/components/layout/AppLayout.jsx](src/components/layout/AppLayout.jsx) (Sidebar + Topbar + Outlet). Reusable primitives live in `src/components/ui/`.

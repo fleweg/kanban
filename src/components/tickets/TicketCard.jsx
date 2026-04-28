@@ -1,4 +1,4 @@
-import { GripVertical, MoreHorizontal } from "lucide-react";
+import { GripVertical, MessageSquare, MoreHorizontal } from "lucide-react";
 import { cn, getPriority } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
@@ -7,6 +7,7 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
   const priority = getPriority(ticket.priority);
   const { getUserById } = useAppData();
   const assignee = getUserById(ticket.assigneeId);
+  const commentCount = ticket.commentCount ?? 0;
 
   return (
     <div
@@ -37,7 +38,18 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
             <p className="text-xs text-surface-500 mt-1 line-clamp-2 dark:text-surface-400">{ticket.description}</p>
           )}
           <div className="mt-2.5 flex items-center justify-between gap-2">
-            <span className={cn("chip", priority.color)}>{priority.label}</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={cn("chip", priority.color)}>{priority.label}</span>
+              {commentCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
+                  title={`${commentCount} comment${commentCount > 1 ? "s" : ""}`}
+                >
+                  <MessageSquare className="h-3 w-3" />
+                  {commentCount}
+                </span>
+              )}
+            </div>
             {assignee ? (
               <UserAvatar user={assignee} size="sm" />
             ) : (

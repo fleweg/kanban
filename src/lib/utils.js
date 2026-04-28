@@ -26,6 +26,37 @@ export function formatDateTime(value) {
   }).format(date);
 }
 
+// Compact relative time for fresh items, falls back to absolute date after 24h.
+export function formatRelativeTime(value) {
+  if (!value) return "—";
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  const diffSec = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (diffSec < 30) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return formatDate(value);
+}
+
+// Splits text into URL and non-URL fragments. Used by components that want to
+// render plain-text content with clickable links without parsing markdown.
+const URL_REGEX = /(https?:\/\/[^\s)]+)/g;
+export function tokenizeForLinks(text) {
+  if (!text) return [];
+  const out = [];
+  let last = 0;
+  for (const match of text.matchAll(URL_REGEX)) {
+    if (match.index > last) out.push({ type: "text", value: text.slice(last, match.index) });
+    out.push({ type: "link", value: match[0] });
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) out.push({ type: "text", value: text.slice(last) });
+  return out;
+}
+
 export const PRIORITIES = [
   { value: "low", label: "Low", color: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
   { value: "medium", label: "Medium", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },

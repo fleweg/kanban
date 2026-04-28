@@ -7,6 +7,7 @@ import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
 import { UserAvatar } from "../users/UserAvatar";
 import { UserPicker } from "../users/UserPicker";
+import { CommentList } from "../comments/CommentList";
 
 const blank = { title: "", description: "", priority: "medium", assigneeId: null };
 
@@ -91,7 +92,7 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
       onClose={onClose}
       title={isEdit ? "Edit ticket" : "New ticket"}
       description={isEdit ? "Update ticket details." : "Add a new item to the backlog or current sprint."}
-      size="lg"
+      size={isEdit ? "xl" : "lg"}
       footer={
         <>
           {isEdit && (
@@ -217,6 +218,12 @@ export function TicketModal({ open, onClose, ticket, defaultSprintId = null, def
           </div>
         )}
       </form>
+
+      {isEdit && (
+        <div className="mt-6 pt-5 border-t border-surface-200 dark:border-surface-700">
+          <CommentList ticketId={ticket.id} />
+        </div>
+      )}
     </Modal>
   );
 }

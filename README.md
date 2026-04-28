@@ -64,7 +64,8 @@ You don&apos;t need to create any collections by hand. The app creates them on f
 
 | Collection | Document shape |
 | --- | --- |
-| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, createdAt, updatedAt }` |
+| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, createdAt, updatedAt }` |
+| `tickets/{id}/comments` | `{ body, authorId, replyTo, edited, deleted, createdAt, updatedAt }` (subcollection) |
 | `sprints` | `{ name, goal, status: "active" \| "completed", createdAt, startedAt, endedAt }` |
 | `config` | Single document `workflow` containing `{ columns: [...], completedColumnId }` |
 
@@ -131,6 +132,14 @@ service cloud.firestore {
     match /tickets/{id} { allow read, write: if isActiveUser(); }
     match /sprints/{id} { allow read, write: if isActiveUser(); }
     match /config/{id}  { allow read, write: if isActiveUser(); }
+
+    match /tickets/{ticketId}/comments/{commentId} {
+      allow read:   if isActiveUser();
+      allow create: if isActiveUser() && request.resource.data.authorId == request.auth.uid;
+      // Soft-delete is performed via update (sets deleted: true), so updates
+      // are open to the author and to admins. Hard-delete is forbidden.
+      allow update: if isActiveUser() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
 
     match /users/{uid} {
       // Self-doc is always readable (first-login bootstrap needs to detect
@@ -242,6 +251,24 @@ Tickets carry two user-related fields:
 - **`assigneeId`** — the `uid` of the assignee, or `null`. Editable from the ticket modal via an "Assignee" dropdown. Any active user can be picked, including the bootstrap admin. Tickets without an assignee show a dashed `?` placeholder on their card; assigned tickets show the assignee's avatar in the bottom-right corner.
 
 Tickets created before this feature was added simply have no assignee until someone edits them.
+
+### Comments
+
+Each ticket has its own comment thread, stored as a Firestore subcollection at `tickets/{ticketId}/comments`. The thread is real-time: any active user reading the ticket sees new comments as they're posted.
+
+**Posting a comment**: open a ticket, scroll to the **Comments** section at the bottom of the ticket modal, type, and click **Comment**. The comment appears immediately.
+
+**Replying**: click **Reply** on a top-level comment, type, click **Reply**. Replies are indented one level under their parent. There is no second level of reply — you can reply to a comment, but you cannot reply to a reply (a deliberate choice to avoid threading complexity for a small-team tool).
+
+**Editing**: click **Edit** on your own comment, change the text, click **Save**. The comment shows an "edited" hint next to its timestamp.
+
+**Deleting**: click **Delete** on your own comment (or any comment if you are an admin). The comment is **soft-deleted** — the body is replaced with a `[deleted]` placeholder so any replies to it stay in context. The Firestore document remains in place; only its `body` and `deleted` fields change. The ticket's `commentCount` is decremented so the card badge stays accurate.
+
+**Comment count on cards**: tickets show a `💬 N` badge beside their priority chip when N > 0. The count is denormalized into `tickets/{id}.commentCount` and is incremented/decremented atomically with each post or soft-delete (single Firestore batch), so the card never goes stale.
+
+**URLs are auto-linkified** in comment bodies. There is no markdown — bodies are rendered as plain text, with `http(s)://…` URLs turned into clickable links. This keeps the surface small and avoids any XSS risk from user-pasted content.
+
+**No notifications / @mentions** today.
 
 ---
 
