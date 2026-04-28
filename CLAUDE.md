@@ -61,9 +61,15 @@ Only one sprint can be `status: "active"` at a time. `createSprint` and `endSpri
 
 The Kanban columns are data, not code. [src/config/defaultWorkflow.json](src/config/defaultWorkflow.json) seeds the `config/workflow` Firestore doc; users edit it from the Settings page. `validateWorkflow` in [src/services/workflow.js](src/services/workflow.js) enforces unique column ids and that `completedColumnId` matches one of them. When a ticket's `status` references a column id that no longer exists (e.g. user renamed it), the board falls back to the first column — preserve that fallback rather than crashing.
 
-### Drag & drop
+### Drag & drop ordering
 
-The board uses `@hello-pangea/dnd`. Dropping a ticket onto a different column calls `changeTicketStatus(id, newColumnId)`. The status field stores the column `id`, not its display name.
+Tickets carry a numeric `order` field; both the Kanban board and the [BacklogPage](src/pages/BacklogPage.jsx) sort by it descending (highest = top). New tickets are created with `order = Date.now()` so they default to the top. The active sprint board ([KanbanBoard](src/components/kanban/KanbanBoard.jsx)) and the backlog list each have their own `DragDropContext` from `@hello-pangea/dnd`.
+
+On every drop, [`computeNewOrder`](src/lib/utils.js) calculates the midpoint between the new visual neighbors (or `±1000` at an extremity) and [`reorderTicket`](src/services/tickets.js) writes a single `updateDoc` (status + order together for cross-column drops on the Kanban board, order-only for same-list reorders).
+
+Tickets that pre-date this feature lack `order`. The `effectiveOrder()` helper falls back to `createdAt.toMillis()` so they still sort coherently against new tickets — the first drag involving such a ticket persists a real `order`. No batch migration was needed.
+
+The status field stores the column `id`, not its display name. Dropping into the same slot (`source.index === destination.index`) is a no-op.
 
 ### Ticket assignment & avatars
 

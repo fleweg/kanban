@@ -64,7 +64,7 @@ You don&apos;t need to create any collections by hand. The app creates them on f
 
 | Collection | Document shape |
 | --- | --- |
-| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, createdAt, updatedAt }` |
+| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, order, createdAt, updatedAt }` |
 | `tickets/{id}/comments` | `{ body, authorId, replyTo, edited, deleted, createdAt, updatedAt }` (subcollection) |
 | `sprints` | `{ name, goal, status: "active" \| "completed", createdAt, startedAt, endedAt }` |
 | `config` | Single document `workflow` containing `{ columns: [...], completedColumnId }` |
@@ -252,6 +252,14 @@ Tickets carry two user-related fields:
 
 Tickets created before this feature was added simply have no assignee until someone edits them.
 
+### Drag &amp; drop ordering
+
+Tickets carry a numeric `order` field. The Kanban board and the backlog list both sort tickets in **descending** order (highest = top). New tickets are created with `order = Date.now()` so they land at the top by default.
+
+When a ticket is dropped at a new position, the app computes its new `order` as the **midpoint** between its new neighbors (or `neighbor.order ± 1000` when dropped at an extremity). On the Kanban board, a cross-column drop also rewrites the ticket's `status`, atomically with the order change.
+
+Tickets created before this feature was added have no explicit `order`. They sort by `createdAt` until they're touched by a drag, at which point a real `order` value is written.
+
 ### Comments
 
 Each ticket has its own comment thread, stored as a Firestore subcollection at `tickets/{ticketId}/comments`. The thread is real-time: any active user reading the ticket sees new comments as they're posted.
@@ -276,11 +284,12 @@ Each ticket has its own comment thread, stored as a Firestore subcollection at `
 
 ### Backlog
 - Create new tickets at any time.
+- **Drag &amp; drop tickets to reorder them** — useful for prioritizing what to pull into the next sprint.
 - If a sprint is active, each backlog ticket gets a quick-action button to move it into the sprint.
 
 ### Active sprint
 - Only one sprint can run at once.
-- Drag &amp; drop tickets between columns. The status update is persisted to Firestore.
+- Drag &amp; drop tickets between columns to change their status, **or within a column to reorder them**. The new order is persisted to Firestore.
 - Click any ticket to edit, change priority, or delete it.
 - Click **End sprint** to either:
   - **Start a new sprint** — non-completed tickets are migrated to the new sprint, keeping their column.

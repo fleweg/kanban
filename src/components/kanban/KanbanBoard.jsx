@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { DragDropContext } from "@hello-pangea/dnd";
 import { KanbanColumn } from "./KanbanColumn";
 import { TicketModal } from "../tickets/TicketModal";
-import { changeTicketStatus } from "../../services/tickets";
+import { reorderTicket } from "../../services/tickets";
+import { compareTickets, computeNewOrder } from "../../lib/utils";
 
 export function KanbanBoard({ workflow, tickets, sprintId }) {
   const [editingTicket, setEditingTicket] = useState(null);
@@ -14,6 +15,8 @@ export function KanbanBoard({ workflow, tickets, sprintId }) {
       const colId = t.status && map[t.status] ? t.status : workflow.columns[0].id;
       map[colId].push(t);
     }
+    // Each column is sorted by ticket order so drag-reorder is reflected.
+    for (const colId of Object.keys(map)) map[colId].sort(compareTickets);
     return map;
   }, [workflow, tickets]);
 
@@ -21,11 +24,16 @@ export function KanbanBoard({ workflow, tickets, sprintId }) {
     const { destination, source, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-    if (destination.droppableId === source.droppableId) return;
 
-    // Optimistic UX: Firestore listener will reconcile order/state.
+    const destCol = ticketsByColumn[destination.droppableId] ?? [];
+    const newOrder = computeNewOrder(destCol, draggableId, destination.index);
+    const crossingColumn = destination.droppableId !== source.droppableId;
+
     try {
-      await changeTicketStatus(draggableId, destination.droppableId);
+      await reorderTicket(draggableId, {
+        order: newOrder,
+        status: crossingColumn ? destination.droppableId : undefined,
+      });
     } catch (err) {
       console.error(err);
     }

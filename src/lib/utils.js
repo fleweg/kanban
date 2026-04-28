@@ -41,6 +41,44 @@ export function formatRelativeTime(value) {
   return formatDate(value);
 }
 
+// Effective sort key for a ticket: explicit `order` if set, otherwise the
+// creation timestamp in millis. Both are comparable numbers, so tickets with
+// and without explicit order can mix in the same sort.
+export function effectiveOrder(ticket) {
+  if (typeof ticket?.order === "number") return ticket.order;
+  const t = ticket?.createdAt;
+  if (t?.toMillis) return t.toMillis();
+  if (t instanceof Date) return t.getTime();
+  return 0;
+}
+
+// Sort tickets descending by effective order — highest = top of the list.
+// Match what the user sees: newest first, then drag-reordered manually.
+export function compareTickets(a, b) {
+  return effectiveOrder(b) - effectiveOrder(a);
+}
+
+// Computes the `order` value for a ticket dropped at `destinationIndex` inside
+// `column` (a list already sorted by descending order). Source ticket is
+// removed first if present, so the helper works for both same-list reorders
+// and cross-list moves.
+//
+// Strategy: midpoint between the new neighbors. Big initial gaps (1000)
+// when inserting at an extremity. JS number precision is large enough that
+// this can run hundreds of times between the same two neighbors before
+// degrading.
+export function computeNewOrder(column, sourceTicketId, destinationIndex) {
+  const filtered = column.filter((t) => t.id !== sourceTicketId);
+  const above = destinationIndex <= 0 ? null : filtered[destinationIndex - 1];
+  const below = destinationIndex >= filtered.length ? null : filtered[destinationIndex];
+  const aboveOrder = above ? effectiveOrder(above) : null;
+  const belowOrder = below ? effectiveOrder(below) : null;
+  if (aboveOrder == null && belowOrder == null) return Date.now();
+  if (aboveOrder == null) return belowOrder + 1000;
+  if (belowOrder == null) return aboveOrder - 1000;
+  return (aboveOrder + belowOrder) / 2;
+}
+
 // Splits text into URL and non-URL fragments. Used by components that want to
 // render plain-text content with clickable links without parsing markdown.
 const URL_REGEX = /(https?:\/\/[^\s)]+)/g;

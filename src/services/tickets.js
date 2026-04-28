@@ -43,9 +43,20 @@ export async function createTicket({
     status,
     createdBy,
     assigneeId,
+    // Initial order = now, so newly created tickets land at the top of their
+    // list (descending sort). Drag-reorder writes new midpoint values later.
+    order: Date.now(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+}
+
+// Used by drag-and-drop handlers. Updates the order and optionally the column
+// (status) atomically — relevant for cross-column drops on the Kanban board.
+export async function reorderTicket(id, { order, status }) {
+  const data = { order, updatedAt: serverTimestamp() };
+  if (status !== undefined) data.status = status;
+  return updateDoc(ticketDoc(id), data);
 }
 
 export async function updateTicket(id, data) {
