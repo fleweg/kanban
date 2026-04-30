@@ -182,6 +182,15 @@ export function checklistProgress(checklist: ChecklistItem[] | null | undefined)
   return { done, total: checklist.length };
 }
 
+// Human-readable byte size, e.g. 2048 -> "2.0 KB". Used for attachment rows.
+export function formatBytes(bytes: number | null | undefined): string {
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`;
+}
+
 // Strips all tags from an HTML string and collapses whitespace, for use in
 // previews (card descriptions, epic cards) where rich formatting would break
 // layout. Falls back to a regex strip when DOMParser is unavailable.

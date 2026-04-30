@@ -69,4 +69,5 @@ export const collections = {
 
 export const configDocs = {
   workflow: "workflow",
+  flexweg: "flexweg",
 } as const;

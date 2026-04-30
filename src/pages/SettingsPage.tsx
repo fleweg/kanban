@@ -1,10 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
-import { Save, Settings as SettingsIcon } from "lucide-react";
+import { Cloud, Save, Settings as SettingsIcon } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { useAppData } from "../context/AppDataContext";
+import { useAuth } from "../context/AuthContext";
 import { getDefaultWorkflow, saveWorkflow, validateWorkflow } from "../services/workflow";
+import {
+  DEFAULT_FLEXWEG_API_BASE_URL,
+  getFlexwegConfig,
+  setFlexwegConfig,
+} from "../services/flexwegConfig";
 
 export function SettingsPage() {
+  const { isAdmin } = useAuth();
+
+  return (
+    <div className="p-4 md:p-8 max-w-4xl mx-auto">
+      <PageHeader
+        title="Settings"
+        description="Configure your Kanban workflow. The completion column is used to determine which tickets are archived when a sprint ends."
+      />
+
+      <WorkflowSettings />
+
+      {isAdmin && <FlexwegApiSettings />}
+    </div>
+  );
+}
+
+function WorkflowSettings() {
   const { workflow } = useAppData();
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -46,12 +69,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto">
-      <PageHeader
-        title="Settings"
-        description="Configure your Kanban workflow. The completion column is used to determine which tickets are archived when a sprint ends."
-      />
-
+    <>
       <div className="card p-5">
         <div className="flex items-center gap-2 mb-4">
           <SettingsIcon className="h-4 w-4 text-surface-500 dark:text-surface-400" />
@@ -102,6 +120,185 @@ export function SettingsPage() {
       <p className="text-xs text-surface-500 mt-3 dark:text-surface-400">
         Tip: changing a column id while tickets reference it will move them back to the first column on the board.
       </p>
+    </>
+  );
+}
+
+// Admin-only block. Stores the Flexweg API key in Firestore at
+// `config/flexweg`. Firestore rules gate writes to admins; reads are open to
+// active users so the attachments service can fetch the key on demand.
+function FlexwegApiSettings() {
+  const [siteUrl, setSiteUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_FLEXWEG_API_BASE_URL);
+  const [hasExistingKey, setHasExistingKey] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getFlexwegConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        if (cfg) {
+          setSiteUrl(cfg.siteUrl);
+          setApiBaseUrl(cfg.apiBaseUrl);
+          setHasExistingKey(true);
+          // Don't pre-fill apiKey: showing it would defeat the password input.
+          // Leaving it empty means "keep the existing key unless I type a new one".
+        }
+      })
+      .catch((err) => !cancelled && setError((err as Error).message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleSave() {
+    setError(null);
+    setSaved(false);
+    if (!siteUrl.trim()) {
+      setError("Site URL is required.");
+      return;
+    }
+    if (!apiKey && !hasExistingKey) {
+      setError("API key is required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      // If apiKey field is empty, fetch the existing key and re-save with new
+      // siteUrl / apiBaseUrl. Otherwise use the new key.
+      let nextKey = apiKey;
+      if (!nextKey && hasExistingKey) {
+        const cfg = await getFlexwegConfig();
+        nextKey = cfg?.apiKey ?? "";
+        if (!nextKey) {
+          setError("Could not load existing API key.");
+          setSaving(false);
+          return;
+        }
+      }
+      await setFlexwegConfig({
+        apiKey: nextKey,
+        siteUrl: siteUrl.trim(),
+        apiBaseUrl: apiBaseUrl.trim() || DEFAULT_FLEXWEG_API_BASE_URL,
+      });
+      setApiKey("");
+      setHasExistingKey(true);
+      setSaved(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card p-5 mt-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Cloud className="h-4 w-4 text-surface-500 dark:text-surface-400" />
+        <h2 className="text-sm font-semibold">Flexweg API (ticket attachments)</h2>
+      </div>
+
+      <p className="text-sm text-surface-500 mb-3 dark:text-surface-400">
+        Required to upload attachments. Generate a permanent API key in your{" "}
+        <a
+          href="https://www.flexweg.com/account/settings#api-keys"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline dark:text-blue-400"
+        >
+          Flexweg account
+        </a>
+        . The key is stored in Firestore — readable by any signed-in team member, writable by admins only.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-surface-500 dark:text-surface-400">Loading current config…</p>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <label className="label" htmlFor="flexweg-site-url">
+              Site URL
+            </label>
+            <input
+              id="flexweg-site-url"
+              className="input"
+              value={siteUrl}
+              onChange={(e) => {
+                setSiteUrl(e.target.value);
+                setSaved(false);
+                setError(null);
+              }}
+              placeholder="https://your-site.flexweg.com"
+            />
+            <p className="text-xs text-surface-500 mt-1 dark:text-surface-400">
+              Used to build the public download URLs for attachments.
+            </p>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="flexweg-api-key">
+              API key
+            </label>
+            <input
+              id="flexweg-api-key"
+              className="input"
+              type="password"
+              value={apiKey}
+              onChange={(e) => {
+                setApiKey(e.target.value);
+                setSaved(false);
+                setError(null);
+              }}
+              placeholder={hasExistingKey ? "•••••••• (set — leave blank to keep)" : "Paste your permanent key"}
+              autoComplete="off"
+            />
+          </div>
+
+          <div>
+            <label className="label" htmlFor="flexweg-api-base">
+              API base URL
+            </label>
+            <input
+              id="flexweg-api-base"
+              className="input"
+              value={apiBaseUrl}
+              onChange={(e) => {
+                setApiBaseUrl(e.target.value);
+                setSaved(false);
+                setError(null);
+              }}
+              placeholder={DEFAULT_FLEXWEG_API_BASE_URL}
+            />
+            <p className="text-xs text-surface-500 mt-1 dark:text-surface-400">
+              Default: <code>{DEFAULT_FLEXWEG_API_BASE_URL}</code>. Override only if your account uses a different host.
+            </p>
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
+              {error}
+            </div>
+          )}
+          {saved && !error && (
+            <div className="rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-2 text-sm dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-700/50">
+              Flexweg config saved.
+            </div>
+          )}
+
+          <div className="flex items-center justify-end">
+            <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+              <Save className="h-4 w-4" />
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -11,7 +12,8 @@ import {
 } from "firebase/firestore";
 import { collections, getDb } from "./firebase";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../lib/issueTypes";
-import type { ChecklistItem, IssueType, Priority, Ticket } from "../types";
+import { deleteAllAttachmentsForTicket } from "./attachments";
+import type { Attachment, ChecklistItem, IssueType, Priority, Ticket } from "../types";
 
 const ticketsCollection = () => collection(getDb(), collections.tickets);
 const ticketDoc = (id: string) => doc(getDb(), collections.tickets, id);
@@ -98,6 +100,15 @@ export async function updateTicket(id: string, data: UpdateTicketInput): Promise
 }
 
 export async function deleteTicket(id: string): Promise<void> {
+  // Best-effort cleanup of Flexweg-hosted attachments before removing the
+  // doc — otherwise we'd leave orphaned blobs counting against the site's
+  // file quota. Read the attachments off the doc first since the cleanup
+  // helper walks the array (we don't list-from-Flexweg, that'd be a
+  // separate paginated API call). Failures are logged inside the helper —
+  // they never block the Firestore deletion.
+  const snap = await getDoc(ticketDoc(id));
+  const attachments = (snap.data()?.attachments ?? []) as Attachment[];
+  await deleteAllAttachmentsForTicket(id, attachments);
   return deleteDoc(ticketDoc(id));
 }
 

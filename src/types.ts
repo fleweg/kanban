@@ -16,6 +16,20 @@ export interface ChecklistItem {
   createdAt: number;
 }
 
+// Attachment metadata stored in the ticket doc. The actual bytes live in
+// Firebase Storage at `storagePath`; `url` is a tokenized download URL good
+// for direct <a>/<img> consumption.
+export interface Attachment {
+  id: string;
+  name: string;
+  contentType: string;
+  size: number;
+  storagePath: string;
+  url: string;
+  uploadedAt: number;
+  uploadedBy: string;
+}
+
 export interface Ticket {
   id: string;
   title: string;
@@ -31,6 +45,7 @@ export interface Ticket {
   epicId: string | null;
   order?: number;
   checklist?: ChecklistItem[];
+  attachments?: Attachment[];
   commentCount?: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

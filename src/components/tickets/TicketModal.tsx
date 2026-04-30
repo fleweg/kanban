@@ -13,10 +13,11 @@ import { TypeIcon } from "../issueTypes/TypeIcon";
 import { TypePicker } from "../issueTypes/TypePicker";
 import { EpicPicker } from "../epics/EpicPicker";
 import { Checklist } from "./Checklist";
+import { Attachments } from "./Attachments";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
 import type { IssueType, Priority, Ticket, UserRecord, Workflow } from "../../types";
 
-type TabId = "details" | "properties" | "checklist" | "comments";
+type TabId = "details" | "properties" | "checklist" | "attachments" | "comments";
 
 interface TicketFormState {
   title: string;
@@ -159,6 +160,7 @@ export function TicketModal({
   // prop snapshot if the live row hasn't propagated yet.
   const liveTicket = ticket?.id ? tickets.find((t) => t.id === ticket.id) ?? ticket : null;
   const { done: checklistDone, total: checklistTotal } = checklistProgress(liveTicket?.checklist);
+  const attachmentCount = liveTicket?.attachments?.length ?? 0;
   const modalTitle = isEdit
     ? isEpicForm
       ? "Edit epic"
@@ -218,6 +220,7 @@ export function TicketModal({
           commentCount={commentCount}
           checklistDone={checklistDone}
           checklistTotal={checklistTotal}
+          attachmentCount={attachmentCount}
         />
       )}
 
@@ -255,6 +258,12 @@ export function TicketModal({
       )}
 
       {isEdit && ticket && (
+        <div className={cn(activeTab !== "attachments" && "hidden", "mt-4")}>
+          <Attachments ticket={ticket} />
+        </div>
+      )}
+
+      {isEdit && ticket && (
         <div className={cn(activeTab !== "comments" && "hidden", "mt-4")}>
           <CommentList ticketId={ticket.id} />
         </div>
@@ -269,15 +278,27 @@ interface TabsProps {
   commentCount: number;
   checklistDone: number;
   checklistTotal: number;
+  attachmentCount: number;
 }
 
-function Tabs({ activeTab, onChange, commentCount, checklistDone, checklistTotal }: TabsProps) {
+function Tabs({
+  activeTab,
+  onChange,
+  commentCount,
+  checklistDone,
+  checklistTotal,
+  attachmentCount,
+}: TabsProps) {
   const items: { id: TabId; label: string }[] = [
     { id: "details", label: "Details" },
     { id: "properties", label: "Properties" },
     {
       id: "checklist",
       label: checklistTotal > 0 ? `Checklist (${checklistDone}/${checklistTotal})` : "Checklist",
+    },
+    {
+      id: "attachments",
+      label: attachmentCount > 0 ? `Attachments (${attachmentCount})` : "Attachments",
     },
     { id: "comments", label: commentCount > 0 ? `Comments (${commentCount})` : "Comments" },
   ];

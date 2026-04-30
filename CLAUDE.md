@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Static React + Vite SPA written in **TypeScript** (`strict` mode), backed by Firebase Firestore (no Cloud Functions, no Auth). Implements a backlog, single-active-sprint workflow, and a configurable Kanban board.
+Static React + Vite SPA written in **TypeScript** (`strict` mode), backed by Firebase Firestore (data) and Firebase Auth (email/password gate). Ticket attachments are uploaded to the Flexweg site via its Files API — **not** Firebase Storage (which requires the paid Blaze plan). No Cloud Functions. Implements a backlog, single-active-sprint workflow, and a configurable Kanban board.
 
 The built `dist/` directory is **committed to the repo** and is the deploy artifact — hosting only requires serving static files (no npm/Node on the server, no SPA fallback config). [vite.config.ts](vite.config.ts) sets `base: "./"` so all asset paths are relative; the SPA uses `HashRouter` so routes live in the URL fragment (`#/sprint`, `#/backlog`, …) and any host that simply serves `index.html` works — including subpaths and `file://`. After any source change you must `npm run build` and commit the regenerated `dist/`.
 
@@ -27,7 +27,7 @@ Firebase credentials are read from `VITE_FIREBASE_*` env vars (see `.env.example
 
 Env vars are typed in [src/vite-env.d.ts](src/vite-env.d.ts) (the `ImportMetaEnv` augmentation). Add new `VITE_*` entries there and `import.meta.env.VITE_FOO` becomes typed everywhere.
 
-Firestore collections used: `tickets`, `sprints`, and a single-doc `config/workflow`. The README documents the (open) security rules and the document shapes.
+Firestore collections: `tickets`, `sprints`, `users`, and the `config/` collection holding `config/workflow` (Kanban columns) and `config/flexweg` (Flexweg API credentials, admin-writable only). Ticket attachments live on the Flexweg site at `attachments/{ticketId}/`. The README documents the Firestore security rules and the document shapes.
 
 ## Authentication
 
@@ -115,6 +115,48 @@ Deletion is **soft** (set `deleted: true`, blank `body`) so replies pointing to 
 URLs in bodies are turned into clickable links via `tokenizeForLinks` in [src/lib/utils.ts](src/lib/utils.ts). There is **no markdown** — keeps XSS surface minimal and avoids a parser dependency.
 
 Permissions: any active user can read comments and post their own; updates allowed for the author or any admin (covers both edit and soft-delete since both go through `update`).
+
+### Rich text descriptions
+
+Ticket descriptions are edited via a [TipTap](https://tiptap.dev)-based WYSIWYG ([src/components/ui/RichTextEditor.tsx](src/components/ui/RichTextEditor.tsx)) and stored as **HTML strings** on the ticket doc. No Markdown, no JSON tree — HTML is human-inspectable in the Firebase console and round-trips through TipTap's schema parser, which acts as a whitelist (anything outside the allowed nodes/marks is stripped on load).
+
+Two consequences worth knowing:
+- **No DOMPurify on render.** The description is never rendered as HTML outside the editor — TicketCard / EpicsPage use `htmlToPlainText` for previews. The threat model is therefore covered by TipTap's own parse step.
+- **Legacy plain-text descriptions** are normalized at editor load: if the value lacks any HTML tag, the editor wraps it in a `<p>` and converts `\n` to `<br>` so multi-line legacy content keeps its layout. See `normalizeContent` in `RichTextEditor.tsx`.
+
+### Checklist
+
+Each ticket can carry a checklist stored as an array on the ticket doc (`checklist: ChecklistItem[]`) — array, not subcollection, since checklists are short-by-design and the array fits comfortably under the 1 MB doc limit. The single setter `updateChecklist(id, items)` in [src/services/tickets.ts](src/services/tickets.ts) replaces the whole array; add / toggle / edit / delete / reorder all rebuild the array client-side.
+
+The [Checklist component](src/components/tickets/Checklist.tsx) reads the **live** ticket via `useAppData().tickets.find(...)` rather than the prop snapshot — otherwise edits made in the modal wouldn't reflect immediately because the modal's `ticket` prop is captured at open-time. Same pattern is reused for the Attachments tab badge in [TicketModal](src/components/tickets/TicketModal.tsx).
+
+### Attachments
+
+Files up to 10 MB are uploaded to the **Flexweg site** via its [Files API](https://documentation.flexweg.com/api-reference/files/) — Firebase Storage is intentionally not used (it requires the paid Blaze plan). The Flexweg API path is `attachments/{ticketId}/{attachmentId}-{filename}` and the public URL is `${siteUrl}/${path}`. Metadata (`name`, `contentType`, `size`, `storagePath`, `url`, `uploadedAt`, `uploadedBy`) lives in `tickets/{id}.attachments[]` so the list reads back without secondary fetches.
+
+[src/services/attachments.ts](src/services/attachments.ts) is the only place that talks to the Flexweg API:
+- `uploadAttachment(ticketId, file, uid)` — reads the file via `FileReader` to base64, POSTs `{path, content, encoding: "base64"}` to `/api/v1/files/upload` with `X-API-Key`, then `arrayUnion`s the metadata onto the ticket. Returns an `UploadHandle` `{ promise, cancel, onProgress }`. Progress is *milestone-based* (encoding → uploading → persisting) — the API isn't streamable, so we can't observe transfer bytes like Firebase Storage's resumable uploads.
+- `deleteAttachment(ticketId, attachment)` — `DELETE /api/v1/files/delete?path=...` first (best-effort, swallows 404), then `arrayRemove` from the ticket.
+- `deleteAllAttachmentsForTicket(ticketId, attachments)` — called from `deleteTicket`. Iterates the known `attachments[]` (no `list` API call) and deletes each. Best-effort; never blocks the Firestore doc deletion.
+
+`validateAttachment(file)` enforces the 10 MB cap and a strict whitelist constrained to **what Flexweg accepts**: images, PDF, fonts, text/code (HTML/CSS/JS/JSON/XML/TXT/MD/CSV). **No Office documents, archives, or video** — those would 4xx at the API layer. Falls back to extension matching when MIME is empty.
+
+#### API key handling — read this carefully
+
+The Flexweg permanent API key is stored in **Firestore** at `config/flexweg` (`{apiKey, siteUrl, apiBaseUrl}`). Firestore rules gate writes to admins only and reads to active users. Service flow:
+
+[src/services/flexwegConfig.ts](src/services/flexwegConfig.ts) exposes `getFlexwegConfig()` (no caching — re-reads on every call, which is cheap; uploads aren't a hot path) and `setFlexwegConfig()` (used by the admin Settings page). The attachments service calls `getFlexwegConfig()` at the start of each operation; if it returns null, the Attachments tab UI shows a "configure your Flexweg key in Settings (admin only)" message instead of the drop zone.
+
+**This is a documented compromise.** The Flexweg docs explicitly warn *"Never ship the API key to the browser"* — the key is meant for backend use. We accept that any signed-in team member can extract the key from devtools at runtime, because:
+1. The key is gated by Firestore rules — anonymous visitors and disabled users cannot fetch it.
+2. A team member already has full Firestore access; the Flexweg key gives no extra privilege over the project's own files (it's scoped to a single Flexweg site).
+3. There is no backend in this architecture — the alternative would be Cloud Functions (Blaze plan) or an external proxy, defeating the "static-only" model.
+
+**Do not reuse this pattern for a public-facing app.** If this Kanban ever needs to be exposed beyond an internal team, route uploads through a backend (Cloud Function, Cloudflare Worker) so the key stays server-side.
+
+#### URLs and security posture
+
+Public download URLs are bare static-asset URLs (`https://your-site.flexweg.com/attachments/...`) — anyone with the URL can read, no token, no expiry. Same posture as private GitHub raw URLs. Acceptable for internal tools; not acceptable for confidential or regulated data.
 
 ### Routing & layout
 

@@ -11,6 +11,9 @@ A fully static React + Firebase ticket manager with a backlog, sprint workflow, 
 - **Kanban board** — drag &amp; drop tickets across columns of a configurable workflow.
 - **Configurable workflow** — column ids, names, and the &quot;completion&quot; column are stored in Firestore as JSON and editable in the Settings page (a default JSON ships with the app).
 - **End-of-sprint migration** — when a sprint is ended, tickets in the completion column stay archived in the ended sprint; every other ticket is migrated to the new sprint with the same status (or sent back to the backlog).
+- **Rich descriptions** — WYSIWYG editor (TipTap) with bold/italic, headings, lists, code blocks, links.
+- **Checklist** — sub-tasks per ticket with live progress badge on cards.
+- **Attachments** — drop images / PDF / text / fonts (up to 10 MB each) into any ticket; stored on your Flexweg site via its [Files API](https://documentation.flexweg.com/api-reference/files/), downloadable from the modal.
 - **Real-time sync** — all data is streamed from Firestore via `onSnapshot`.
 - **Static build** — deploy the `dist/` folder to any static host. Designed primarily for [Flexweg](https://www.flexweg.com), but works on Netlify, Vercel, GitHub Pages, Firebase Hosting, etc.
 
@@ -51,7 +54,7 @@ The dev server runs at <http://localhost:5173>.
 
 ## Firebase setup
 
-This project uses **Firestore in Native mode** as its only backend. There is no Cloud Functions, Auth, or Storage requirement to get started.
+This project uses **Firestore in Native mode** for data and **Firebase Authentication** (email/password) for the login gate. Ticket attachments are stored on your Flexweg site (not Firebase Storage) via the Flexweg Files API — see the [Attachments section](#attachments) for setup. No Cloud Functions, no Firebase Storage.
 
 &gt; For an opinionated, Flexweg-flavored walkthrough of the steps below (with screenshots and the full deploy story), see the [**Kanban with Firebase**](https://documentation.flexweg.com/use-cases/kanban-with-firebase/) use case on Flexweg&apos;s documentation site. The [**Connect to external databases**](https://documentation.flexweg.com/advanced-usage/external-databases/) page also explains why a public Firebase API key is safe to ship in a static bundle when Firestore Security Rules are configured properly — the model this project relies on.
 
@@ -72,10 +75,10 @@ You don&apos;t need to create any collections by hand. The app creates them on f
 
 | Collection | Document shape |
 | --- | --- |
-| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, order, type, epicId, createdAt, updatedAt }` |
+| `tickets` | `{ title, description, priority, sprintId, status, createdBy, assigneeId, commentCount, order, type, epicId, checklist[], attachments[], createdAt, updatedAt }` |
 | `tickets/{id}/comments` | `{ body, authorId, replyTo, edited, deleted, createdAt, updatedAt }` (subcollection) |
 | `sprints` | `{ name, goal, status: "active" \| "completed", createdAt, startedAt, endedAt }` |
-| `config` | Single document `workflow` containing `{ columns: [...], completedColumnId }` |
+| `config` | `workflow`: `{ columns: [...], completedColumnId }` · `flexweg`: `{ apiKey, siteUrl, apiBaseUrl }` (set from Settings, admin-only) |
 
 ### 3. Register a web app
 
@@ -139,7 +142,15 @@ service cloud.firestore {
 
     match /tickets/{id} { allow read, write: if isActiveUser(); }
     match /sprints/{id} { allow read, write: if isActiveUser(); }
-    match /config/{id}  { allow read, write: if isActiveUser(); }
+
+    // Workflow JSON is editable by every active member (Settings page).
+    match /config/workflow { allow read, write: if isActiveUser(); }
+    // Flexweg API key — readable by active users (the attachments service
+    // needs it to upload), writable only by admins.
+    match /config/flexweg  {
+      allow read:  if isActiveUser();
+      allow write: if isAdmin();
+    }
 
     match /tickets/{ticketId}/comments/{commentId} {
       allow read:   if isActiveUser();
@@ -271,7 +282,7 @@ If a user's record has `disabled: true` or no longer exists, the next page reque
 
 ### Avatars and ticket assignment
 
-Each user is rendered as a colored disc with their initials, derived from the email's local part (`john.doe@x.com` → `JD`, `frederic@…` → `F`). The disc color is hashed deterministically from the user's `uid`, so the same person always shows up in the same color across the app. No avatar uploads, no Firebase Storage — purely client-side.
+Each user is rendered as a colored disc with their initials, derived from the email's local part (`john.doe@x.com` → `JD`, `frederic@…` → `F`). The disc color is hashed deterministically from the user's `uid`, so the same person always shows up in the same color across the app. No avatar uploads — initials only, computed client-side.
 
 Tickets carry two user-related fields:
 
@@ -323,6 +334,59 @@ Each ticket has its own comment thread, stored as a Firestore subcollection at `
 **URLs are auto-linkified** in comment bodies. There is no markdown — bodies are rendered as plain text, with `http(s)://…` URLs turned into clickable links. This keeps the surface small and avoids any XSS risk from user-pasted content.
 
 **No notifications / @mentions** today.
+
+### Description editor
+
+The ticket description uses a small WYSIWYG editor based on [TipTap](https://tiptap.dev). Output is sanitized HTML stored as a string on the ticket doc — no Markdown, no JSON tree. Toolbar covers **B / I / S / inline code / code block / h2 / h3 / bullet & numbered lists / blockquote / link**.
+
+Card and Epics-page previews strip HTML to plain text via `htmlToPlainText` in [src/lib/utils.ts](src/lib/utils.ts) so rich formatting never breaks the `line-clamp-2` layout.
+
+Pre-existing tickets with plain-text descriptions are displayed transparently — the editor wraps unstructured input in a `&lt;p&gt;` and converts `\n` to `&lt;br&gt;` on first open, so multi-line legacy content keeps its layout.
+
+### Checklist
+
+Each ticket can carry a checklist (sub-tasks). Items are stored as an array on the ticket doc (`checklist: [{ id, text, done, createdAt }]`) — no subcollection, since checklists are short by nature and array updates piggyback on the same ticket write.
+
+**Adding / editing**: open a ticket, switch to the **Checklist** tab. Type in the bottom input + Enter to add. Click an item to rename inline. Drag-free reordering uses ↑/↓ arrows. Empty edits delete the item (matches Jira/Trello).
+
+**Card badge**: tickets show a `☑ done/total` badge next to the comment badge. Green when complete, gray otherwise.
+
+Edits persist immediately (no Save button) — the checklist component reads the live ticket from the app data context so concurrent edits show up in real time.
+
+### Attachments
+
+Tickets accept file uploads up to **10 MB each** stored on your Flexweg site via its [Files API](https://documentation.flexweg.com/api-reference/files/). The chosen storage strategy is documented further down ("Why Flexweg, not Firebase Storage").
+
+**One-time setup (admin)** — before anyone can upload:
+
+1. Generate a **permanent API key** in your [Flexweg account → API](https://www.flexweg.com/account/settings#api-keys). The key is scoped to a single site.
+2. In the Kanban, sign in as an admin and open **Settings**. A "Flexweg API (ticket attachments)" block is shown only to admins. Fill in:
+   - **Site URL** — the public URL of your Flexweg site, e.g. `https://your-site.flexweg.com` (no trailing slash). Used to build download URLs.
+   - **API key** — paste the permanent key from step 1.
+   - **API base URL** — defaults to `https://www.flexweg.com/api/v1`. Override only if your account uses a different host.
+3. Click **Save**. Configuration is written to Firestore at `config/flexweg`. Until this is done, the **Attachments** tab on tickets shows a "not configured" message instead of the drop zone.
+
+**Storage layout**: `attachments/{ticketId}/{attachmentId}-{filename}` on your Flexweg site. Folders are created automatically by the Files API. Attachment metadata (name, content type, size, public URL, uploader, timestamp) lives in `tickets/{id}.attachments[]` so the list reads back without any extra API calls.
+
+**Adding files**: open a ticket, switch to the **Attachments** tab. Drop files or click to pick — multiple files at once is fine. A coarse progress indicator shows per file (encoding → uploading → persisting); the Flexweg upload is a single POST so we can't observe transfer bytes like a resumable upload.
+
+**Allowed types**: constrained to what Flexweg's Files API accepts — images (JPG, PNG, GIF, SVG, WebP, ICO), PDF, fonts (WOFF, WOFF2, TTF, OTF), and text/code (HTML, CSS, JS, JSON, XML, TXT, MD, CSV). **Office documents (Word/Excel/PowerPoint), archives (ZIP/RAR/7z), and video are not supported**. The 10 MB cap is enforced client-side; the Flexweg quota (per plan) is the hard ceiling.
+
+**Previews**: image attachments render a thumbnail; everything else gets a typed icon. Click the thumbnail or **Download** to fetch — files are served as static assets at `https://your-site.flexweg.com/attachments/...`.
+
+**Deletion**: click the trash icon on a row. The Flexweg `DELETE /api/v1/files/delete?path=...` is called first (best-effort — a 404 means the file was already gone), then the metadata is removed from the `attachments` array. When an entire ticket is deleted, the app loops over the `attachments[]` and DELETEs each one before removing the Firestore doc — so we never accumulate orphaned files counting against the Flexweg quota.
+
+Card badge: `📎 N` next to the comment / checklist badges.
+
+#### Why Flexweg, not Firebase Storage
+
+Firebase Storage requires the Blaze (paid) plan. Flexweg, on the other hand, already hosts the static SPA — its Files API gives us the same upload/list/delete capabilities for free within the site's plan quota. The trade-off is:
+- ✅ No extra paid service.
+- ✅ Files served by the same CDN as the app.
+- ⛔ Reduced file-type whitelist (no Office, no archives).
+- ⛔ The Flexweg API key has to be stored somewhere reachable by the browser (we use Firestore, gated by Firestore rules to active users only). A team member could in theory extract the key from devtools — acceptable for an internal tool, but **do not use this pattern for a public-facing app**.
+
+&gt; **Security note**: the Flexweg docs explicitly say *"Never ship the API key to the browser"* (it's intended for backend use). The Firestore-cached approach is a documented compromise — the key isn't in the bundle, but signed-in team members can extract it at runtime. For a public-facing deployment, route uploads through a backend (Cloud Function, Cloudflare Worker, etc.) so the key stays server-side.
 
 ---
 
@@ -381,7 +445,7 @@ src/
 │   ├── kanban/          (KanbanBoard, KanbanColumn)
 │   ├── layout/          (AppLayout, Sidebar, Topbar, PageHeader)
 │   ├── sprints/         (SprintCard, SprintModal, EndSprintModal)
-│   ├── tickets/         (TicketCard, TicketModal, Checklist)
+│   ├── tickets/         (TicketCard, TicketModal, Checklist, Attachments)
 │   ├── users/           (UserAvatar, UserPicker)
 │   └── ui/              (Modal, Badge, EmptyState)
 ├── config/
@@ -407,6 +471,8 @@ src/
 │   ├── auth.ts              (signIn / signOut / reset)
 │   ├── users.ts             (users collection CRUD)
 │   ├── comments.ts          (per-ticket comment subcollection)
+│   ├── attachments.ts       (Flexweg Files API uploads + ticket array sync)
+│   ├── flexwegConfig.ts     (Firestore-cached Flexweg API key + site URL)
 │   ├── sprints.ts
 │   ├── tickets.ts
 │   └── workflow.ts

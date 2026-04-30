@@ -1,5 +1,5 @@
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
-import { CheckSquare, GripVertical, MessageSquare, MoreHorizontal } from "lucide-react";
+import { CheckSquare, GripVertical, MessageSquare, MoreHorizontal, Paperclip } from "lucide-react";
 import { cn, checklistProgress, getPriority, htmlToPlainText } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
@@ -22,6 +22,7 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
   const assignee = getUserById(ticket.assigneeId);
   const epic = getEpicById(ticket.epicId);
   const commentCount = ticket.commentCount ?? 0;
+  const attachmentCount = ticket.attachments?.length ?? 0;
   const { done: checklistDone, total: checklistTotal } = checklistProgress(ticket.checklist);
   const checklistComplete = checklistTotal > 0 && checklistDone === checklistTotal;
   // The description is now HTML (TipTap output) but legacy tickets contain
@@ -91,6 +92,15 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
                 >
                   <CheckSquare className="h-3 w-3" />
                   {checklistDone}/{checklistTotal}
+                </span>
+              )}
+              {attachmentCount > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
+                  title={`${attachmentCount} attachment${attachmentCount > 1 ? "s" : ""}`}
+                >
+                  <Paperclip className="h-3 w-3" />
+                  {attachmentCount}
                 </span>
               )}
             </div>
