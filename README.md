@@ -2,6 +2,8 @@
 
 A fully static React + Firebase ticket manager with a backlog, sprint workflow, and a configurable Kanban board.
 
+&gt; This project is the reference implementation for Flexweg&apos;s [Kanban with Firebase](https://documentation.flexweg.com/use-cases/kanban-with-firebase/) use case — a guided walkthrough of cloning, configuring Firebase, building, and deploying the app to [Flexweg](https://www.flexweg.com)&apos;s free static hosting. The README below is the deeper technical reference.
+
 ## Features
 
 - **Backlog** — store tickets that aren&apos;t in any active sprint.
@@ -10,7 +12,7 @@ A fully static React + Firebase ticket manager with a backlog, sprint workflow, 
 - **Configurable workflow** — column ids, names, and the &quot;completion&quot; column are stored in Firestore as JSON and editable in the Settings page (a default JSON ships with the app).
 - **End-of-sprint migration** — when a sprint is ended, tickets in the completion column stay archived in the ended sprint; every other ticket is migrated to the new sprint with the same status (or sent back to the backlog).
 - **Real-time sync** — all data is streamed from Firestore via `onSnapshot`.
-- **Static build** — deploy the `dist/` folder to any static host (Firebase Hosting, Netlify, Vercel, GitHub Pages…).
+- **Static build** — deploy the `dist/` folder to any static host. Designed primarily for [Flexweg](https://www.flexweg.com), but works on Netlify, Vercel, GitHub Pages, Firebase Hosting, etc.
 
 ## Stack
 
@@ -46,6 +48,8 @@ The dev server runs at <http://localhost:5173>.
 ## Firebase setup
 
 This project uses **Firestore in Native mode** as its only backend. There is no Cloud Functions, Auth, or Storage requirement to get started.
+
+&gt; For an opinionated, Flexweg-flavored walkthrough of the steps below (with screenshots and the full deploy story), see the [**Kanban with Firebase**](https://documentation.flexweg.com/use-cases/kanban-with-firebase/) use case on Flexweg&apos;s documentation site. The [**Connect to external databases**](https://documentation.flexweg.com/advanced-usage/external-databases/) page also explains why a public Firebase API key is safe to ship in a static bundle when Firestore Security Rules are configured properly — the model this project relies on.
 
 ### 1. Create a Firebase project
 
@@ -176,7 +180,27 @@ Firestore will prompt you in the browser console with a one-click link the first
 - `tickets where sprintId == X`
 - `sprints where status == "active"`
 
-### 8. (Optional) Deploy to Firebase Hosting
+### 8. Deploy to Flexweg
+
+This project is intended to be hosted on [**Flexweg**](https://www.flexweg.com) — its free static hosting is the canonical target and the whole build pipeline is tuned for it (`vite.config.js` uses `base: &quot;./&quot;` and the SPA uses `HashRouter`, so no SPA-fallback config is needed on the host).
+
+The pre-built `dist/` directory is committed to the repo, so deploying does not require Node on the host. The minimum flow is:
+
+1. **Build** locally (only needed if you changed any source — the committed `dist/` is always up to date with the latest commit):
+   ```bash
+   npm run build
+   ```
+2. **Upload** the contents of `dist/` to your Flexweg site root via the Flexweg file explorer (or the Flexweg CLI / GitHub Action if you have a CI pipeline).
+
+The full step-by-step guide — including how to create your Flexweg account, generate an API key, and wire up GitHub Actions for automatic deploys — lives on the Flexweg docs:
+
+- [**Kanban with Firebase**](https://documentation.flexweg.com/use-cases/kanban-with-firebase/) — end-to-end walkthrough for this exact project.
+- [**Use-case prerequisites**](https://documentation.flexweg.com/use-cases/prerequisites/) — Docker / Git / GitHub / Flexweg account setup, done once.
+- [**Git CI/CD**](https://documentation.flexweg.com/advanced-usage/git-cicd/) — automating `npm run build` + upload from a GitHub Actions workflow.
+
+#### Deploying elsewhere
+
+The `dist/` folder is plain static files, so any host that serves `index.html` works (Netlify, Vercel, GitHub Pages, Firebase Hosting, Cloudflare Pages, …). If you specifically want Firebase Hosting:
 
 ```bash
 npm install -g firebase-tools
