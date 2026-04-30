@@ -17,6 +17,7 @@ A fully static React + Firebase ticket manager with a backlog, sprint workflow, 
 ## Stack
 
 - React 18 + Vite 5
+- **TypeScript** (strict mode — `tsc --noEmit` runs as a `prebuild` gate)
 - Firebase 11 (modular SDK, Firestore)
 - React Router v6
 - TailwindCSS 3
@@ -36,7 +37,10 @@ cp .env.example .env
 # 3. Run the dev server
 npm run dev
 
-# 4. Build for production
+# 4. Type-check on demand (also runs automatically before each build)
+npm run typecheck
+
+# 5. Build for production
 npm run build
 npm run preview   # serve the static build locally
 ```
@@ -182,7 +186,7 @@ Firestore will prompt you in the browser console with a one-click link the first
 
 ### 8. Deploy to Flexweg
 
-This project is intended to be hosted on [**Flexweg**](https://www.flexweg.com) — its free static hosting is the canonical target and the whole build pipeline is tuned for it (`vite.config.js` uses `base: &quot;./&quot;` and the SPA uses `HashRouter`, so no SPA-fallback config is needed on the host).
+This project is intended to be hosted on [**Flexweg**](https://www.flexweg.com) — its free static hosting is the canonical target and the whole build pipeline is tuned for it (`vite.config.ts` uses `base: &quot;./&quot;` and the SPA uses `HashRouter`, so no SPA-fallback config is needed on the host).
 
 The pre-built `dist/` directory is committed to the repo, so deploying does not require Node on the host. The minimum flow is:
 
@@ -278,7 +282,7 @@ Tickets created before this feature was added simply have no assignee until some
 
 ### Issue types &amp; epics
 
-Each ticket carries a **type**: `task` (default), `bug`, `story`, or `epic`. The type catalog lives in [src/lib/issueTypes.js](src/lib/issueTypes.js); to add another type (e.g. `chore`), append an entry there with an icon (from `lucide-react`) and Tailwind color classes — no other change required.
+Each ticket carries a **type**: `task` (default), `bug`, `story`, or `epic`. The type catalog lives in [src/lib/issueTypes.ts](src/lib/issueTypes.ts); to add another type (e.g. `chore`), append an entry there with an icon (from `lucide-react`) and Tailwind color classes — and add the new id to the `IssueType` union in [src/types.ts](src/types.ts).
 
 The type icon shows up in three places: at the start of the ticket title (on cards and in the modal), in the ticket modal's **Type** dropdown, and on the modal header next to the title. The type doesn't affect filtering or status flow today; it's purely a categorization aid.
 
@@ -365,40 +369,52 @@ Each ticket has its own comment thread, stored as a Firestore subcollection at `
 
 ## Project structure
 
+The codebase is **TypeScript-first** (`.tsx` for components / pages, `.ts` for services / hooks / utils). Domain types (`Ticket`, `Sprint`, `Workflow`, `UserRecord`, …) live in [src/types.ts](src/types.ts) — extend that file rather than reaching for inline `Record<string, unknown>`. Firestore docs are cast to domain types only inside the `services/` layer (boundary); the rest of the app sees fully-typed data.
+
 ```
 src/
 ├── components/
-│   ├── ErrorScreen.jsx
-│   ├── kanban/
-│   ├── layout/         (AppLayout, Sidebar, Topbar, PageHeader)
-│   ├── sprints/
-│   ├── tickets/
-│   └── ui/
+│   ├── ErrorScreen.tsx
+│   ├── comments/        (CommentList, CommentItem, CommentComposer)
+│   ├── epics/           (EpicChip, EpicPicker)
+│   ├── issueTypes/      (TypeIcon, TypePicker)
+│   ├── kanban/          (KanbanBoard, KanbanColumn)
+│   ├── layout/          (AppLayout, Sidebar, Topbar, PageHeader)
+│   ├── sprints/         (SprintCard, SprintModal, EndSprintModal)
+│   ├── tickets/         (TicketCard, TicketModal, Checklist)
+│   ├── users/           (UserAvatar, UserPicker)
+│   └── ui/              (Modal, Badge, EmptyState)
 ├── config/
 │   └── defaultWorkflow.json
 ├── context/
-│   ├── AppDataContext.jsx   (tickets/sprints/workflow data)
-│   └── AuthContext.jsx      (current user, role, isAdmin)
-├── hooks/                   (useTickets, useSprints, useWorkflow)
+│   ├── AppDataContext.tsx   (tickets/sprints/workflow/users data)
+│   ├── AuthContext.tsx      (current user, role, isAdmin)
+│   └── ThemeContext.tsx     (light/dark theme)
+├── hooks/                   (useTickets, useSprints, useWorkflow, useUsers)
 ├── lib/
-│   └── utils.js
+│   ├── issueTypes.ts        (task/bug/story/epic catalog)
+│   └── utils.ts
 ├── pages/
-│   ├── ActiveSprintPage.jsx
-│   ├── BacklogPage.jsx
-│   ├── LoginPage.jsx
-│   ├── SettingsPage.jsx
-│   ├── SprintsPage.jsx
-│   └── UsersPage.jsx        (admin only)
+│   ├── ActiveSprintPage.tsx
+│   ├── BacklogPage.tsx
+│   ├── EpicsPage.tsx
+│   ├── LoginPage.tsx
+│   ├── SettingsPage.tsx
+│   ├── SprintsPage.tsx
+│   └── UsersPage.tsx        (admin only)
 ├── services/
-│   ├── firebase.js          (lazy app/db/auth init, env vars)
-│   ├── auth.js              (signIn / signOut / reset)
-│   ├── users.js             (users collection CRUD)
-│   ├── sprints.js
-│   ├── tickets.js
-│   └── workflow.js
-├── App.jsx
+│   ├── firebase.ts          (lazy app/db/auth init, env vars)
+│   ├── auth.ts              (signIn / signOut / reset)
+│   ├── users.ts             (users collection CRUD)
+│   ├── comments.ts          (per-ticket comment subcollection)
+│   ├── sprints.ts
+│   ├── tickets.ts
+│   └── workflow.ts
+├── App.tsx
 ├── index.css
-└── main.jsx
+├── main.tsx
+├── types.ts                 (domain types — single source of truth)
+└── vite-env.d.ts            (typed import.meta.env for VITE_* vars)
 ```
 
 ---
@@ -408,7 +424,8 @@ src/
 | Command | Description |
 | --- | --- |
 | `npm run dev` | Start the Vite dev server. |
-| `npm run build` | Build the static site into `dist/`. |
+| `npm run typecheck` | Run `tsc --noEmit` against the whole project. |
+| `npm run build` | Type-check, then build the static site into `dist/`. A failing `tsc` blocks the bundle. |
 | `npm run preview` | Preview the production build locally. |
 
 ## License
