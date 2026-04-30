@@ -2,7 +2,7 @@ import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction
 import { Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { RichTextEditor } from "../ui/RichTextEditor";
-import { cn, PRIORITIES, formatDateTime } from "../../lib/utils";
+import { checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
 import { createTicket, deleteTicket, updateTicket } from "../../services/tickets";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
@@ -15,6 +15,8 @@ import { EpicPicker } from "../epics/EpicPicker";
 import { Checklist } from "./Checklist";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
 import type { IssueType, Priority, Ticket, UserRecord, Workflow } from "../../types";
+
+type TabId = "details" | "properties" | "checklist" | "comments";
 
 interface TicketFormState {
   title: string;
@@ -56,12 +58,12 @@ export function TicketModal({
   workflow,
 }: TicketModalProps) {
   const { user } = useAuth();
-  const { getUserById } = useAppData();
+  const { tickets, getUserById } = useAppData();
   const isEdit = Boolean(ticket?.id);
   const [form, setForm] = useState<TicketFormState>(blank);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"details" | "comments">("details");
+  const [activeTab, setActiveTab] = useState<TabId>("details");
 
   useEffect(() => {
     if (!open) return;
@@ -152,6 +154,11 @@ export function TicketModal({
 
   const creator = isEdit && ticket ? getUserById(ticket.createdBy) : null;
   const commentCount = ticket?.commentCount ?? 0;
+  // Read the live ticket from context so the Checklist tab badge stays in
+  // sync with mutations the Checklist itself persists. Falls back to the
+  // prop snapshot if the live row hasn't propagated yet.
+  const liveTicket = ticket?.id ? tickets.find((t) => t.id === ticket.id) ?? ticket : null;
+  const { done: checklistDone, total: checklistTotal } = checklistProgress(liveTicket?.checklist);
   const modalTitle = isEdit
     ? isEpicForm
       ? "Edit epic"
@@ -160,6 +167,7 @@ export function TicketModal({
       ? "New epic"
       : "New ticket";
   const submitLabel = isEdit ? "Save changes" : isEpicForm ? "Create epic" : "Create ticket";
+  const showStatusField = !isEpicForm && isEdit && Boolean(ticket?.sprintId) && (workflow?.columns?.length ?? 0) > 0;
 
   return (
     <Modal
@@ -172,11 +180,13 @@ export function TicketModal({
         </span>
       }
       description={
-        isEdit
-          ? "Update details."
-          : isEpicForm
-            ? "Group multiple tickets under a higher-level container."
-            : "Add a new item to the backlog or current sprint."
+        isEdit && ticket ? (
+          <CreatedBySubtitle creator={creator} ticket={ticket} />
+        ) : isEpicForm ? (
+          "Group multiple tickets under a higher-level container."
+        ) : (
+          "Add a new item to the backlog or current sprint."
+        )
       }
       size={isEdit ? "xl" : "lg"}
       footer={
@@ -206,29 +216,46 @@ export function TicketModal({
           activeTab={activeTab}
           onChange={setActiveTab}
           commentCount={commentCount}
+          checklistDone={checklistDone}
+          checklistTotal={checklistTotal}
         />
       )}
 
-      {/* Both panes stay mounted so the form is always submittable from the
-          footer button (it lives outside this body), and so the comment
-          subscription doesn't tear down when switching tabs. The inactive
-          pane is hidden via display:none. */}
-      <div className={cn(isEdit && activeTab !== "details" && "hidden")}>
-        <DetailsForm
-          form={form}
-          setForm={setForm}
-          onSubmit={handleSubmit}
-          isEdit={isEdit}
-          isEpicForm={isEpicForm}
-          ticket={ticket ?? null}
-          workflow={workflow}
-          creator={creator}
-          error={error}
-        />
-      </div>
+      {/* All form fields share a single <form> so the footer Save button can
+          submit from any tab. Inactive panes are hidden via display:none, not
+          unmounted, so state and focus stay intact across tab switches. */}
+      <form id="ticket-form" onSubmit={handleSubmit} className="space-y-4">
+        <div className={cn(isEdit && activeTab !== "details" && "hidden", "space-y-4")}>
+          <DetailsPane form={form} setForm={setForm} />
+        </div>
+
+        <div className={cn(isEdit && activeTab !== "properties" && "hidden")}>
+          <PropertiesPane
+            form={form}
+            setForm={setForm}
+            isEpicForm={isEpicForm}
+            showStatusField={showStatusField}
+            workflow={workflow}
+          />
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
+            {error}
+          </div>
+        )}
+      </form>
+
+      {/* Checklist and Comments live outside the form: they persist their
+          changes directly to Firestore (no Save-button round trip). */}
+      {isEdit && ticket && (
+        <div className={cn(activeTab !== "checklist" && "hidden", "mt-4")}>
+          <Checklist ticket={ticket} />
+        </div>
+      )}
 
       {isEdit && ticket && (
-        <div className={cn(activeTab !== "comments" && "hidden")}>
+        <div className={cn(activeTab !== "comments" && "hidden", "mt-4")}>
           <CommentList ticketId={ticket.id} />
         </div>
       )}
@@ -237,18 +264,25 @@ export function TicketModal({
 }
 
 interface TabsProps {
-  activeTab: "details" | "comments";
-  onChange: (tab: "details" | "comments") => void;
+  activeTab: TabId;
+  onChange: (tab: TabId) => void;
   commentCount: number;
+  checklistDone: number;
+  checklistTotal: number;
 }
 
-function Tabs({ activeTab, onChange, commentCount }: TabsProps) {
-  const items: { id: "details" | "comments"; label: string }[] = [
+function Tabs({ activeTab, onChange, commentCount, checklistDone, checklistTotal }: TabsProps) {
+  const items: { id: TabId; label: string }[] = [
     { id: "details", label: "Details" },
+    { id: "properties", label: "Properties" },
+    {
+      id: "checklist",
+      label: checklistTotal > 0 ? `Checklist (${checklistDone}/${checklistTotal})` : "Checklist",
+    },
     { id: "comments", label: commentCount > 0 ? `Comments (${commentCount})` : "Comments" },
   ];
   return (
-    <div className="flex gap-4 -mx-6 px-6 mb-5 border-b border-surface-200 dark:border-surface-700">
+    <div className="flex gap-4 -mx-6 px-6 mb-5 border-b border-surface-200 overflow-x-auto dark:border-surface-700">
       {items.map((it) => {
         const active = activeTab === it.id;
         return (
@@ -257,7 +291,7 @@ function Tabs({ activeTab, onChange, commentCount }: TabsProps) {
             type="button"
             onClick={() => onChange(it.id)}
             className={cn(
-              "py-2 -mb-px border-b-2 text-sm font-medium transition-colors",
+              "py-2 -mb-px border-b-2 text-sm font-medium transition-colors whitespace-nowrap",
               active
                 ? "border-surface-900 text-surface-900 dark:border-surface-50 dark:text-surface-50"
                 : "border-transparent text-surface-500 hover:text-surface-900 dark:text-surface-400 dark:hover:text-surface-100",
@@ -271,31 +305,14 @@ function Tabs({ activeTab, onChange, commentCount }: TabsProps) {
   );
 }
 
-interface DetailsFormProps {
+interface DetailsPaneProps {
   form: TicketFormState;
   setForm: Dispatch<SetStateAction<TicketFormState>>;
-  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
-  isEdit: boolean;
-  isEpicForm: boolean;
-  ticket: Ticket | null;
-  workflow?: Workflow;
-  creator: UserRecord | null;
-  error: string | null;
 }
 
-function DetailsForm({
-  form,
-  setForm,
-  onSubmit,
-  isEdit,
-  isEpicForm,
-  ticket,
-  workflow,
-  creator,
-  error,
-}: DetailsFormProps) {
+function DetailsPane({ form, setForm }: DetailsPaneProps) {
   return (
-    <form id="ticket-form" onSubmit={onSubmit} className="space-y-4">
+    <>
       <div>
         <label className="label" htmlFor="ticket-title">
           Title
@@ -318,103 +335,109 @@ function DetailsForm({
           placeholder="Add context, acceptance criteria, links…"
         />
       </div>
+    </>
+  );
+}
 
-      {isEdit && ticket?.id && (
-        <div className="border-t border-surface-200 pt-4 dark:border-surface-700">
-          <Checklist ticket={ticket} />
+interface PropertiesPaneProps {
+  form: TicketFormState;
+  setForm: Dispatch<SetStateAction<TicketFormState>>;
+  isEpicForm: boolean;
+  showStatusField: boolean;
+  workflow?: Workflow;
+}
+
+function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow }: PropertiesPaneProps) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label className="label" htmlFor="ticket-type">
+          Type
+        </label>
+        <TypePicker value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} />
+      </div>
+
+      <div>
+        <label className="label" htmlFor="ticket-priority">
+          Priority
+        </label>
+        <select
+          id="ticket-priority"
+          className="input"
+          value={form.priority}
+          onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as Priority }))}
+        >
+          {PRIORITIES.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="label" htmlFor="ticket-assignee">
+          Assignee
+        </label>
+        <UserPicker
+          value={form.assigneeId}
+          onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
+        />
+      </div>
+
+      {!isEpicForm && (
+        <div>
+          <label className="label" htmlFor="ticket-epic">
+            Epic
+          </label>
+          <EpicPicker value={form.epicId} onChange={(v) => setForm((f) => ({ ...f, epicId: v }))} />
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {showStatusField && workflow && (
         <div>
-          <label className="label" htmlFor="ticket-type">
-            Type
-          </label>
-          <TypePicker value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} />
-        </div>
-
-        <div>
-          <label className="label" htmlFor="ticket-priority">
-            Priority
+          <label className="label" htmlFor="ticket-status">
+            Status
           </label>
           <select
-            id="ticket-priority"
+            id="ticket-status"
             className="input"
-            value={form.priority}
-            onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as Priority }))}
+            value={form.status ?? ""}
+            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
           >
-            {PRIORITIES.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
+            {workflow.columns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </select>
         </div>
-
-        <div>
-          <label className="label" htmlFor="ticket-assignee">
-            Assignee
-          </label>
-          <UserPicker
-            value={form.assigneeId}
-            onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
-          />
-        </div>
-
-        {!isEpicForm && (
-          <div>
-            <label className="label" htmlFor="ticket-epic">
-              Epic
-            </label>
-            <EpicPicker value={form.epicId} onChange={(v) => setForm((f) => ({ ...f, epicId: v }))} />
-          </div>
-        )}
-
-        {!isEpicForm && isEdit && ticket?.sprintId && workflow?.columns && workflow.columns.length > 0 && (
-          <div>
-            <label className="label" htmlFor="ticket-status">
-              Status
-            </label>
-            <select
-              id="ticket-status"
-              className="input"
-              value={form.status ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-            >
-              {workflow.columns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
-
-      {isEdit && ticket && (
-        <div className="flex items-center gap-2 pt-2 text-xs text-surface-500 dark:text-surface-400">
-          {creator ? (
-            <>
-              <UserAvatar user={creator} size="xs" />
-              <span>
-                Created by <span className="text-surface-700 dark:text-surface-200">{creator.email}</span>
-                {ticket.createdAt && <> &middot; {formatDateTime(ticket.createdAt)}</>}
-              </span>
-            </>
-          ) : (
-            <span>
-              Created
-              {ticket.createdAt && <> {formatDateTime(ticket.createdAt)}</>}
-            </span>
-          )}
-        </div>
       )}
+    </div>
+  );
+}
 
-      {error && (
-        <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
-          {error}
-        </div>
-      )}
-    </form>
+interface CreatedBySubtitleProps {
+  creator: UserRecord | null;
+  ticket: Ticket;
+}
+
+// Renders inside the Modal's `description` slot (a `<p>`), so it must use
+// inline elements only — UserAvatar already renders a span.
+function CreatedBySubtitle({ creator, ticket }: CreatedBySubtitleProps) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {creator && <UserAvatar user={creator} size="xs" />}
+      <span>
+        {creator ? (
+          <>
+            Created by <span className="text-surface-700 dark:text-surface-200">{creator.email}</span>
+          </>
+        ) : (
+          <>Created</>
+        )}
+        {ticket.createdAt && <> &middot; {formatDateTime(ticket.createdAt)}</>}
+      </span>
+    </span>
   );
 }

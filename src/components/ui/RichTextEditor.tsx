@@ -66,7 +66,10 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
     editorProps: {
       attributes: {
         // The `prose-editor` class hooks the styles defined in index.css.
-        class: "prose-editor input min-h-[110px] focus:outline-none",
+        // Generous min-height because most ticket descriptions span several
+        // lines (acceptance criteria, repro steps, links). The editor still
+        // grows naturally past this when the content needs more room.
+        class: "prose-editor input min-h-[280px] focus:outline-none",
       },
     },
   });
