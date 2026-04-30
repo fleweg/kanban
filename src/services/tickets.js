@@ -89,3 +89,13 @@ export async function moveTicketToBacklog(id) {
 export async function changeTicketStatus(id, status) {
   return updateTicket(id, { status });
 }
+
+// Replaces the whole checklist array. Add/toggle/edit/remove/reorder all
+// rebuild the array on the client and call this single setter — keeps
+// concurrent writes from different fields from clobbering each other.
+export async function updateChecklist(id, checklist) {
+  return updateDoc(ticketDoc(id), {
+    checklist,
+    updatedAt: serverTimestamp(),
+  });
+}

@@ -146,3 +146,13 @@ export function initialsFromEmail(email) {
   const letters = parts.slice(0, 2).map((p) => p[0]).join("");
   return letters.toUpperCase();
 }
+
+// Counts done/total across a ticket's checklist. Tickets created before the
+// checklist feature have no `checklist` field — treated as empty here.
+export function checklistProgress(checklist) {
+  if (!Array.isArray(checklist) || checklist.length === 0) {
+    return { done: 0, total: 0 };
+  }
+  const done = checklist.reduce((acc, item) => acc + (item?.done ? 1 : 0), 0);
+  return { done, total: checklist.length };
+}

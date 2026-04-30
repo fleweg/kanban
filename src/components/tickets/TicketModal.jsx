@@ -11,6 +11,7 @@ import { CommentList } from "../comments/CommentList";
 import { TypeIcon } from "../issueTypes/TypeIcon";
 import { TypePicker } from "../issueTypes/TypePicker";
 import { EpicPicker } from "../epics/EpicPicker";
+import { Checklist } from "./Checklist";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
 
 const blank = {
@@ -271,6 +272,12 @@ function DetailsForm({ form, setForm, onSubmit, isEdit, isEpicForm, ticket, work
           placeholder="Add context, acceptance criteria, links…"
         />
       </div>
+
+      {isEdit && ticket?.id && (
+        <div className="border-t border-surface-200 pt-4 dark:border-surface-700">
+          <Checklist ticket={ticket} />
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>

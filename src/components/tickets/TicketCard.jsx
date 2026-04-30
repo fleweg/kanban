@@ -1,5 +1,5 @@
-import { GripVertical, MessageSquare, MoreHorizontal } from "lucide-react";
-import { cn, getPriority } from "../../lib/utils";
+import { CheckSquare, GripVertical, MessageSquare, MoreHorizontal } from "lucide-react";
+import { cn, checklistProgress, getPriority } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
 import { TypeIcon } from "../issueTypes/TypeIcon";
@@ -11,6 +11,8 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
   const assignee = getUserById(ticket.assigneeId);
   const epic = getEpicById(ticket.epicId);
   const commentCount = ticket.commentCount ?? 0;
+  const { done: checklistDone, total: checklistTotal } = checklistProgress(ticket.checklist);
+  const checklistComplete = checklistTotal > 0 && checklistDone === checklistTotal;
 
   return (
     <div
@@ -60,6 +62,20 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
                 >
                   <MessageSquare className="h-3 w-3" />
                   {commentCount}
+                </span>
+              )}
+              {checklistTotal > 0 && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 text-[11px] tabular-nums",
+                    checklistComplete
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-surface-500 dark:text-surface-400",
+                  )}
+                  title={`Checklist · ${checklistDone}/${checklistTotal} done`}
+                >
+                  <CheckSquare className="h-3 w-3" />
+                  {checklistDone}/{checklistTotal}
                 </span>
               )}
             </div>
