@@ -181,3 +181,15 @@ export function checklistProgress(checklist: ChecklistItem[] | null | undefined)
   const done = checklist.reduce((acc, item) => acc + (item?.done ? 1 : 0), 0);
   return { done, total: checklist.length };
 }
+
+// Strips all tags from an HTML string and collapses whitespace, for use in
+// previews (card descriptions, epic cards) where rich formatting would break
+// layout. Falls back to a regex strip when DOMParser is unavailable.
+export function htmlToPlainText(html: string | null | undefined): string {
+  if (!html) return "";
+  const raw =
+    typeof DOMParser !== "undefined"
+      ? new DOMParser().parseFromString(html, "text/html").body.textContent ?? ""
+      : html.replace(/<[^>]*>/g, "");
+  return raw.replace(/\s+/g, " ").trim();
+}

@@ -1,6 +1,6 @@
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
 import { CheckSquare, GripVertical, MessageSquare, MoreHorizontal } from "lucide-react";
-import { cn, checklistProgress, getPriority } from "../../lib/utils";
+import { cn, checklistProgress, getPriority, htmlToPlainText } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
 import { TypeIcon } from "../issueTypes/TypeIcon";
@@ -24,6 +24,10 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
   const commentCount = ticket.commentCount ?? 0;
   const { done: checklistDone, total: checklistTotal } = checklistProgress(ticket.checklist);
   const checklistComplete = checklistTotal > 0 && checklistDone === checklistTotal;
+  // The description is now HTML (TipTap output) but legacy tickets contain
+  // plain text. htmlToPlainText handles both — strips tags or returns the
+  // text untouched, then collapses whitespace.
+  const descriptionPreview = htmlToPlainText(ticket.description);
 
   return (
     <div
@@ -55,8 +59,8 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
               {ticket.title}
             </p>
           </div>
-          {ticket.description && !compact && (
-            <p className="text-xs text-surface-500 mt-1 line-clamp-2 dark:text-surface-400">{ticket.description}</p>
+          {descriptionPreview && !compact && (
+            <p className="text-xs text-surface-500 mt-1 line-clamp-2 dark:text-surface-400">{descriptionPreview}</p>
           )}
           {epic && (
             <div className="mt-2">

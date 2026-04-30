@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
+import { RichTextEditor } from "../ui/RichTextEditor";
 import { cn, PRIORITIES, formatDateTime } from "../../lib/utils";
 import { createTicket, deleteTicket, updateTicket } from "../../services/tickets";
 import { useAppData } from "../../context/AppDataContext";
@@ -310,14 +311,10 @@ function DetailsForm({
       </div>
 
       <div>
-        <label className="label" htmlFor="ticket-description">
-          Description
-        </label>
-        <textarea
-          id="ticket-description"
-          className="input min-h-[110px] resize-y"
+        <label className="label">Description</label>
+        <RichTextEditor
           value={form.description}
-          onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          onChange={(html) => setForm((f) => ({ ...f, description: html }))}
           placeholder="Add context, acceptance criteria, links…"
         />
       </div>

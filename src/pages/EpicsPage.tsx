@@ -6,6 +6,7 @@ import { TicketModal } from "../components/tickets/TicketModal";
 import { UnassignedAvatar, UserAvatar } from "../components/users/UserAvatar";
 import { useAppData } from "../context/AppDataContext";
 import { EPIC_TYPE } from "../lib/issueTypes";
+import { htmlToPlainText } from "../lib/utils";
 import type { Ticket } from "../types";
 
 interface EpicStats {
@@ -80,11 +81,14 @@ export function EpicsPage() {
                         {epic.title}
                       </h3>
                     </div>
-                    {epic.description && (
-                      <p className="text-sm text-surface-500 mt-1.5 line-clamp-2 dark:text-surface-400">
-                        {epic.description}
-                      </p>
-                    )}
+                    {(() => {
+                      const preview = htmlToPlainText(epic.description);
+                      return preview ? (
+                        <p className="text-sm text-surface-500 mt-1.5 line-clamp-2 dark:text-surface-400">
+                          {preview}
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                   {assignee ? <UserAvatar user={assignee} size="md" /> : <UnassignedAvatar size="md" />}
                 </div>

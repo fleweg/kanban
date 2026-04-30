@@ -63,6 +63,67 @@
   }
 }
 
+/* TipTap-rendered content. Tailwind preflight strips defaults from h2/ul/pre
+   etc., so we restore them explicitly here scoped to .prose-editor. */
+.prose-editor {
+  @apply text-sm text-surface-900 dark:text-surface-100;
+}
+.prose-editor:focus-visible {
+  @apply ring-2 ring-blue-500/60;
+}
+.prose-editor > * + * {
+  @apply mt-2;
+}
+.prose-editor h2 {
+  @apply text-base font-semibold mt-3;
+}
+.prose-editor h3 {
+  @apply text-sm font-semibold mt-2.5;
+}
+.prose-editor p {
+  @apply leading-relaxed;
+}
+.prose-editor ul {
+  @apply list-disc pl-6;
+}
+.prose-editor ol {
+  @apply list-decimal pl-6;
+}
+.prose-editor li > p {
+  @apply my-0;
+}
+.prose-editor strong {
+  @apply font-semibold;
+}
+.prose-editor em {
+  @apply italic;
+}
+.prose-editor s {
+  @apply line-through;
+}
+.prose-editor a {
+  @apply text-blue-600 underline underline-offset-2 dark:text-blue-400;
+}
+.prose-editor blockquote {
+  @apply border-l-2 border-surface-300 pl-3 italic text-surface-600 dark:border-surface-600 dark:text-surface-300;
+}
+.prose-editor code {
+  @apply rounded bg-surface-100 text-surface-800 px-1 py-0.5 text-[0.85em] font-mono dark:bg-surface-800 dark:text-surface-100;
+}
+.prose-editor pre {
+  @apply bg-surface-900 text-surface-100 rounded-md p-3 overflow-x-auto text-xs font-mono dark:bg-surface-950;
+}
+.prose-editor pre code {
+  @apply bg-transparent text-inherit p-0 text-[1em];
+}
+/* Placeholder shown when the editor is empty. ProseMirror adds the
+   `is-editor-empty` class to the empty paragraph; we read the placeholder
+   text from a data attribute set by the editor's editorProps. */
+.prose-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  @apply text-surface-400 dark:text-surface-500 float-left h-0 pointer-events-none;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
