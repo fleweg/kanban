@@ -1,51 +1,40 @@
-import { initializeApp, getApps, type FirebaseApp, type FirebaseOptions } from "firebase/app";
+import { initializeApp, getApps, type FirebaseApp } from "firebase/app";
 import { getFirestore, type Firestore } from "firebase/firestore";
 import { getAuth, type Auth } from "firebase/auth";
-
-function readConfig(): FirebaseOptions {
-  return {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  };
-}
+import {
+  getMissingFirebaseFields,
+  getRuntimeConfig,
+  resetRuntimeConfigCache,
+  type FlexwegRuntimeConfig,
+} from "../lib/runtimeConfig";
 
 export function getAdminEmail(): string {
-  const v = import.meta.env.VITE_ADMIN_EMAIL;
+  const v = getRuntimeConfig()?.adminEmail;
   return typeof v === "string" ? v.trim().toLowerCase() : "";
 }
 
-const ENV_KEY_BY_FIELD: Record<string, string> = {
-  apiKey: "VITE_FIREBASE_API_KEY",
-  authDomain: "VITE_FIREBASE_AUTH_DOMAIN",
-  projectId: "VITE_FIREBASE_PROJECT_ID",
-  storageBucket: "VITE_FIREBASE_STORAGE_BUCKET",
-  messagingSenderId: "VITE_FIREBASE_MESSAGING_SENDER_ID",
-  appId: "VITE_FIREBASE_APP_ID",
-};
-
+// Returns the env var names that would need to be filled in .env to
+// boot the Kanban without going through the in-app SetupForm. Returns
+// [] when the runtime config is already resolved (either from
+// window.__FLEXWEG_CONFIG__ or from baked-in import.meta.env values).
 export function getMissingFirebaseEnvVars(): string[] {
-  const config = readConfig() as Record<string, string | undefined>;
-  return Object.entries(config)
-    .filter(([, v]) => !v)
-    .map(([k]) => ENV_KEY_BY_FIELD[k])
-    .filter((v): v is string => Boolean(v));
+  return getMissingFirebaseFields();
 }
 
 let cachedDb: Firestore | null = null;
 let cachedAuth: Auth | null = null;
+let cachedApp: FirebaseApp | null = null;
 
 function getApp(): FirebaseApp {
-  const missing = getMissingFirebaseEnvVars();
-  if (missing.length > 0) {
+  if (cachedApp) return cachedApp;
+  const config = getRuntimeConfig();
+  if (!config) {
     throw new Error(
-      `Missing Firebase env variables: ${missing.join(", ")}. Copy .env.example to .env and fill in your project credentials.`,
+      "Firebase config not available. The runtime resolver returned null — either fill .env or complete the in-app SetupForm.",
     );
   }
-  return getApps()[0] ?? initializeApp(readConfig());
+  cachedApp = getApps()[0] ?? initializeApp(config.firebase);
+  return cachedApp;
 }
 
 export function getDb(): Firestore {
@@ -58,6 +47,30 @@ export function getAuthClient(): Auth {
   if (cachedAuth) return cachedAuth;
   cachedAuth = getAuth(getApp());
   return cachedAuth;
+}
+
+// Initialises Firebase from a SetupForm payload before the runtime
+// config has been persisted. Used during first-run setup so we can
+// authenticate the admin and write config/flexweg to Firestore
+// *before* uploading the populated config.js to Flexweg.
+//
+// After this returns, getDb() / getAuthClient() will reuse the same
+// app instance, and getRuntimeConfig() will resolve from
+// window.__FLEXWEG_CONFIG__ (which we set here as a side effect so
+// the rest of the codebase stays in sync without a reload).
+export function initFirebaseFromSetup(config: FlexwegRuntimeConfig): void {
+  // Idempotent: if Firebase was already initialised on a previous
+  // submit attempt that failed mid-flow, reuse the cached app
+  // silently. Throwing here would make the SetupForm's catch block
+  // flip submitting back to false before the spinner has a chance to
+  // commit. For users who need to genuinely swap Firebase creds
+  // (typo on the first attempt), a page refresh resets cachedApp.
+  if (typeof window !== "undefined") {
+    window.__FLEXWEG_CONFIG__ = config;
+  }
+  resetRuntimeConfigCache();
+  if (cachedApp) return;
+  cachedApp = initializeApp(config.firebase);
 }
 
 export const collections = {

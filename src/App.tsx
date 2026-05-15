@@ -12,8 +12,9 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { EpicsPage } from "./pages/EpicsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { SetupForm } from "./pages/SetupForm";
 import { ErrorScreen } from "./components/ErrorScreen";
-import { getAdminEmail, getMissingFirebaseEnvVars } from "./services/firebase";
+import { getRuntimeConfig } from "./lib/runtimeConfig";
 
 interface BoundaryState {
   error: Error | null;
@@ -102,22 +103,20 @@ function AuthenticatedShell() {
 }
 
 export default function App() {
-  const missing = getMissingFirebaseEnvVars();
-  if (missing.length > 0) {
+  // Short-circuit to the first-run SetupForm whenever the runtime
+  // resolver cannot produce a complete config — either window.__FLEXWEG_CONFIG__
+  // is the null stub from /config.js (fresh deployment), or .env is
+  // missing required values during dev. The SetupForm handles both
+  // paths uniformly: it writes a populated config.js to Flexweg and
+  // reloads, after which getRuntimeConfig() resolves and the normal
+  // boot path runs.
+  if (!getRuntimeConfig()) {
     return (
-      <ErrorScreen
-        title="Firebase is not configured"
-        message={`The following env variables are missing:\n${missing.join("\n")}\n\nCopy .env.example to .env, fill in your Firebase project credentials, and restart the dev server.`}
-      />
-    );
-  }
-
-  if (!getAdminEmail()) {
-    return (
-      <ErrorScreen
-        title="Admin email is not configured"
-        message={"VITE_ADMIN_EMAIL is missing in .env. Set it to the email of the bootstrap administrator."}
-      />
+      <AppErrorBoundary>
+        <ThemeProvider>
+          <SetupForm />
+        </ThemeProvider>
+      </AppErrorBoundary>
     );
   }
 

@@ -1,0 +1,114 @@
+{
+  "common": {
+    "language": "언어",
+    "back": "뒤로",
+    "cancel": "취소",
+    "save": "저장",
+    "saving": "저장 중…"
+  },
+  "login": {
+    "brandSubtitle": "스프린트 및 백로그",
+    "cardTitle": "로그인",
+    "cardSubtitle": "업무용 이메일과 비밀번호를 사용하세요.",
+    "emailLabel": "이메일",
+    "emailPlaceholder": "you@company.com",
+    "passwordLabel": "비밀번호",
+    "passwordPlaceholder": "••••••••",
+    "submit": "로그인",
+    "submitting": "로그인 중…",
+    "forgot": "비밀번호를 잊으셨나요?",
+    "resetSent": "비밀번호 재설정 이메일을 {{email}}(으)로 보냈습니다.",
+    "errors": {
+      "missingFields": "이메일과 비밀번호는 필수입니다.",
+      "missingEmailForReset": "위에 이메일을 먼저 입력한 다음 재설정을 클릭하세요."
+    },
+    "footer": "계정 요청은 관리자를 통해 처리됩니다."
+  },
+  "setup": {
+    "title": "Kanban 설정",
+    "subtitle": "최초 실행 구성",
+    "footer": "구성은 config.js로 Flexweg 사이트에 업로드됩니다. 양식을 다시 실행하면 덮어씁니다.",
+    "stepper": {
+      "welcome": "환영합니다",
+      "firebase": "Firebase",
+      "flexweg": "Flexweg"
+    },
+    "welcome": {
+      "heading": "Kanban에 오신 것을 환영합니다",
+      "intro": "이 최초 실행 설정은 데이터와 인증을 위해 Kanban을 Firebase 프로젝트에 연결한 다음, 티켓 첨부 파일을 위해 Flexweg 사이트에 연결합니다. Firebase 프로젝트가 준비되어 있다면 약 2분 정도 걸립니다.",
+      "firebaseTitle": "Firebase 프로젝트 필요",
+      "firebaseBody": "Kanban은 무료 Firebase 프로젝트가 필요합니다 (Spark plan으로 충분 — 결제 정보 불필요). Web app config와 부트스트랩 관리자가 될 Authentication 사용자가 필요합니다. Email/Password 로그인이 활성화되어 있어야 합니다.",
+      "tutorialUrl": "https://firebase.google.com/docs/web/setup",
+      "tutorialButton": "Firebase 설정 가이드",
+      "haveAccountButton": "Firebase 프로젝트가 있습니다"
+    },
+    "sections": {
+      "firebase": "Firebase",
+      "admin": "부트스트랩 관리자",
+      "flexweg": "Flexweg"
+    },
+    "intro": "Firebase Web app config와 부트스트랩 관리자의 이메일을 입력하세요. 관리자는 Firebase Auth 사용자로 이미 존재해야 합니다 — 먼저 Firebase Console에서 수동으로 생성하세요.",
+    "introFlexweg": "Flexweg API 키를 입력하세요 — Kanban은 Flexweg의 Files API를 사용하여 티켓 첨부 파일을 업로드하고, 또한 구성을 저장하여 모든 팀원의 브라우저가 이 양식을 다시 작성하지 않고도 시작할 수 있도록 합니다.",
+    "help": {
+      "firebase": "Firebase Console → Project settings → Your apps → Web app config 에서 이 값들을 복사하세요.",
+      "admin": "Firestore users/{uid} 레코드 없이 관리자 권한을 얻는 Firebase Auth 사용자입니다. 이미 존재해야 합니다 — Firebase Console → Authentication → Users 에서 생성하세요.",
+      "flexweg": "Flexweg 계정 대시보드에서 이 값들을 찾을 수 있습니다.",
+      "flexwegApiKeyHint": "영구 API 키를 생성하세요 —",
+      "flexwegApiKeyLink": "Flexweg 계정 설정"
+    },
+    "fields": {
+      "apiKey": "apiKey",
+      "authDomain": "authDomain",
+      "projectId": "projectId",
+      "storageBucket": "storageBucket",
+      "messagingSenderId": "messagingSenderId",
+      "appId": "appId",
+      "adminEmail": "관리자 이메일",
+      "adminPassword": "관리자 비밀번호",
+      "flexwegApiKey": "API 키",
+      "flexwegSiteUrl": "사이트 URL",
+      "flexwegApiBaseUrl": "API 기본 URL"
+    },
+    "steps": {
+      "signIn": "Firebase에 로그인 중…",
+      "verifyEmail": "관리자 이메일 일치 확인 중…",
+      "testFlexweg": "Flexweg API 키 테스트 중…",
+      "writeFirestore": "config/flexweg를 Firestore에 쓰는 중…",
+      "uploadConfig": "config.js를 Flexweg에 업로드하는 중…"
+    },
+    "stepsDone": {
+      "signIn": "Firebase에 로그인됨",
+      "verifyEmail": "관리자 이메일 확인됨",
+      "testFlexweg": "Flexweg API 키 확인됨",
+      "writeFirestore": "Firestore 구성 저장됨",
+      "uploadConfig": "config.js 업로드됨"
+    },
+    "continueToFlexweg": "Flexweg로 계속",
+    "submit": "설정 완료",
+    "submitting": "구성 중…",
+    "success": "준비 완료!",
+    "reloadingHint": "Kanban을 다시 로드하는 중…",
+    "errors": {
+      "missingFields": "일부 필수 필드가 누락되었거나 유효하지 않습니다.",
+      "firebaseAuthInvalidCredential": "이메일 또는 비밀번호가 잘못되었습니다.",
+      "firebaseAuthInvalidCredentialHint": "Firebase Console (Authentication → Users)에서 관리자 이메일과 비밀번호를 다시 확인하세요. 이 프로젝트에 Email/Password 로그인이 활성화되어 있어야 합니다.",
+      "wrongAdminEmail": "로그인한 Firebase 계정이 입력한 관리자 이메일과 일치하지 않습니다. 다시 시도하세요.",
+      "firebaseAuthUserNotFound": "해당 이메일과 일치하는 Firebase 계정이 없습니다.",
+      "firebaseAuthInvalidEmail": "잘못된 이메일 형식입니다.",
+      "firebaseInvalidApiKey": "Firebase API 키가 유효하지 않습니다. apiKey 필드를 다시 확인하세요.",
+      "firebaseNetwork": "Firebase 연결 중 네트워크 오류가 발생했습니다.",
+      "firebaseTooManyRequests": "로그인 시도가 너무 많습니다. 잠시 후 다시 시도하세요.",
+      "firebaseOperationNotAllowed": "이 Firebase 프로젝트에 Email/Password 로그인이 활성화되어 있지 않습니다. Firebase Console → Authentication → Sign-in method 에서 활성화하세요.",
+      "firebaseUserDisabled": "이 Firebase 계정은 비활성화되어 있습니다.",
+      "firebaseAuthGeneric": "Firebase 로그인에 실패했습니다.",
+      "flexwegAuth": "Flexweg API 키가 거부되었습니다. Flexweg 계정 → API에서 값을 확인하세요.",
+      "flexwegNetwork": "Flexweg 연결 중 네트워크 오류가 발생했습니다. API 기본 URL과 연결을 확인하세요.",
+      "flexwegHttp": "Flexweg API 오류 (HTTP {{status}}): {{detail}}",
+      "firestoreRulesTitle": "Firestore rules가 쓰기를 거부했습니다.",
+      "firestoreRulesHint": "Firebase Console → Firestore → Rules를 열고 부트스트랩 관리자 이메일이 일치하는지 확인하세요: {{email}}.",
+      "firestoreOther": "Firestore 오류",
+      "uploadFailed": "config.js를 Flexweg에 업로드할 수 없습니다",
+      "generic": "문제가 발생했습니다."
+    }
+  }
+}

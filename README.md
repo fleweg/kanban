@@ -16,6 +16,8 @@ A fully static React + Firebase ticket manager with a backlog, sprint workflow, 
 - **Attachments** — drop images / PDF / text / fonts (up to 10 MB each) into any ticket; stored on your Flexweg site via its [Files API](https://documentation.flexweg.com/api-reference/files/), downloadable from the modal.
 - **Real-time sync** — all data is streamed from Firestore via `onSnapshot`.
 - **Static build** — deploy the `dist/` folder to any static host. Designed primarily for [Flexweg](https://www.flexweg.com), but works on Netlify, Vercel, GitHub Pages, Firebase Hosting, etc.
+- **First-run setup UI** — drop the bundled `dist/` on Flexweg without editing `.env` and the app shows an in-browser **SetupForm**. It collects Firebase config + bootstrap admin email + Flexweg API key, then writes a populated `config.js` back to your Flexweg site so every browser boots straight into the app without re-running the form. `.env` is now optional — useful for non-developer deployments.
+- **7 admin languages** — UI translated into English, French, German, Spanish, Dutch, Portuguese, Korean. Resolves from `localStorage` → `navigator.language` → English. Switchable from anywhere via the flag chip.
 
 ## Stack
 
@@ -33,9 +35,16 @@ A fully static React + Firebase ticket manager with a backlog, sprint workflow, 
 # 1. Install dependencies
 npm install
 
-# 2. Configure Firebase (see section below)
+# 2. Configure Firebase — TWO PATHS, pick one:
+
+# 2a. Developer path: bake credentials into the build via .env
 cp .env.example .env
-# fill in the VITE_FIREBASE_* values
+# fill in the VITE_FIREBASE_* + VITE_ADMIN_EMAIL values
+
+# 2b. No-edit path: skip .env. The app renders an in-browser
+#     SetupForm on first load, you fill in Firebase config + admin
+#     email there, and it persists to localStorage. Useful for
+#     deploying dist/ to a host without ever opening a code editor.
 
 # 3. Run the dev server
 npm run dev
@@ -86,30 +95,36 @@ You don&apos;t need to create any collections by hand. The app creates them on f
 2. In **Your apps**, click **&lt;/&gt; Web** to register a web app (skip Hosting for now).
 3. Copy the `firebaseConfig` values shown — you&apos;ll paste them into `.env`.
 
-### 4. Configure `.env`
+### 4. Configure the Firebase credentials
 
-Copy `.env.example` to `.env` at the project root, and fill in the values from the previous step plus the bootstrap admin email:
+There are **two ways** to feed Firebase config + bootstrap admin email into the app. The resolver in [`src/lib/runtimeConfig.ts`](src/lib/runtimeConfig.ts) checks them in this order and the first complete source wins:
 
-```bash
-VITE_FIREBASE_API_KEY=AIzaSy...
-VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your-project
-VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=1234567890
-VITE_FIREBASE_APP_ID=1:1234567890:web:abcdef
+1. **`window.__FLEXWEG_CONFIG__`** — set by `/config.js` loaded synchronously before the bundle. The bundled `public/config.js` ships as `window.__FLEXWEG_CONFIG__ = null;`. The in-app **SetupForm** rewrites that file on your Flexweg site after first-run configuration; from that point on, every visitor's browser reads the populated config before the bundle boots. This is the production path on Flexweg — see [section 8 (Deploy)](#8-deploy-to-flexweg) for the end-to-end flow.
 
-# Email of the bootstrap administrator (must match an account you create in
-# Firebase Authentication, see "Authentication & user management" below).
-VITE_ADMIN_EMAIL=admin@example.com
-```
+2. **`.env` at build time** — the developer path. Copy `.env.example` to `.env`:
 
-Restart `npm run dev` after editing `.env`.
+   ```bash
+   VITE_FIREBASE_API_KEY=AIzaSy...
+   VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+   VITE_FIREBASE_PROJECT_ID=your-project
+   VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+   VITE_FIREBASE_MESSAGING_SENDER_ID=1234567890
+   VITE_FIREBASE_APP_ID=1:1234567890:web:abcdef
 
-> The app guards against missing variables and shows a friendly error screen if any are absent.
+   # Email of the bootstrap administrator (must match an account you create
+   # in Firebase Authentication, see "Authentication & user management" below).
+   VITE_ADMIN_EMAIL=admin@example.com
+   ```
+
+   Restart `npm run dev` after editing. Vite inlines these into the bundle at build time and the SetupForm never shows.
+
+> **You don't have to pick the path before building.** The same `dist/` works for both: if `.env` was filled at build time, the values are baked in; otherwise the SetupForm appears on first load and writes `config.js` to Flexweg, which takes over for subsequent reloads. Whichever path you take, **the rules file in step 5 still needs the admin email hardcoded** — Firestore rules can't read env vars or fetched JS files.
 
 ### 5. Firestore security rules
 
-Open **Firestore Database &gt; Rules** and paste the rules below. They require a signed-in, non-disabled user for every read/write, and restrict the `users` collection to administrators. Replace `admin@example.com` with the same value you set for `VITE_ADMIN_EMAIL` in `.env`.
+Open **Firestore Database &gt; Rules** and paste the rules below. They require a signed-in, non-disabled user for every read/write, and restrict the `users` collection to administrators. Replace `admin@example.com` with whatever bootstrap admin email you configured at the runtime layer — `.env`'s `VITE_ADMIN_EMAIL`, the SetupForm's localStorage entry, or a hand-edited `dist/config.js`. Firestore rules can't read those sources, so the value has to be pinned here statically; any mismatch makes admin-only writes fail with `permission-denied`.
+
+> Note: `isBootstrapAdmin()` checks email match only — **not** `request.auth.token.email_verified`. If you'd rather refuse unverified accounts admin access, add `&& request.auth.token.email_verified == true` inside that function and turn on email verification in Firebase Console → Authentication → Templates. The default leaves verification off because the kanban is an internal-team tool where the bootstrap admin is created manually by an operator.
 
 ```rules
 rules_version = '2';
@@ -244,11 +259,11 @@ The role of every member except the bootstrap admin is stored in Firestore under
 
 The very first administrator is "hard-coded" through configuration:
 
-- The email is set in `.env` as `VITE_ADMIN_EMAIL`.
+- The email lives in the **runtime config** — sourced from `.env` (`VITE_ADMIN_EMAIL`), the SetupForm's localStorage entry, or a hand-edited `dist/config.js`. See "Configure the Firebase credentials" above for the three sources.
 - The same email is referenced in the Firestore security rules.
 - This account is treated as admin **without** needing a record in the `users` Firestore collection — that solves the chicken-and-egg problem of needing an admin to create the first admin.
 
-If you ever need to change the bootstrap admin, update both `.env` (then `npm run build` + redeploy) **and** the Firestore rules.
+If you ever need to change the bootstrap admin, update the active runtime source (re-run the SetupForm, or edit `.env` + rebuild, or edit `dist/config.js` on the host) **and** the Firestore rules.
 
 ### Adding a new member
 
@@ -447,7 +462,7 @@ src/
 │   ├── sprints/         (SprintCard, SprintModal, EndSprintModal)
 │   ├── tickets/         (TicketCard, TicketModal, Checklist, Attachments)
 │   ├── users/           (UserAvatar, UserPicker)
-│   └── ui/              (Modal, Badge, EmptyState)
+│   └── ui/              (Modal, Badge, EmptyState, LocaleSwitcher)
 ├── config/
 │   └── defaultWorkflow.json
 ├── context/
@@ -455,8 +470,20 @@ src/
 │   ├── AuthContext.tsx      (current user, role, isAdmin)
 │   └── ThemeContext.tsx     (light/dark theme)
 ├── hooks/                   (useTickets, useSprints, useWorkflow, useUsers)
+├── i18n/                    (i18next init + 7 locale bundles: en, fr, de, es, nl, pt, ko)
+│   ├── index.ts
+│   ├── en.json              (source of truth — every key falls back here)
+│   ├── fr.json
+│   ├── de.json
+│   ├── es.json
+│   ├── nl.json
+│   ├── pt.json
+│   └── ko.json
 ├── lib/
+│   ├── adminBase.ts         (auto-detects the kanban's folder on Flexweg for config.js upload)
 │   ├── issueTypes.ts        (task/bug/story/epic catalog)
+│   ├── runtimeConfig.ts     (Firebase config resolver: window global → .env)
+│   ├── setupApi.ts          (Flexweg API helpers used by the first-run SetupForm)
 │   └── utils.ts
 ├── pages/
 │   ├── ActiveSprintPage.tsx
@@ -464,10 +491,11 @@ src/
 │   ├── EpicsPage.tsx
 │   ├── LoginPage.tsx
 │   ├── SettingsPage.tsx
+│   ├── SetupForm.tsx        (first-run config wizard — renders when getRuntimeConfig() is null)
 │   ├── SprintsPage.tsx
 │   └── UsersPage.tsx        (admin only)
 ├── services/
-│   ├── firebase.ts          (lazy app/db/auth init, env vars)
+│   ├── firebase.ts          (lazy app/db/auth init via runtime config resolver)
 │   ├── auth.ts              (signIn / signOut / reset)
 │   ├── users.ts             (users collection CRUD)
 │   ├── comments.ts          (per-ticket comment subcollection)

@@ -24,6 +24,24 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Runtime config bootstrap — must load synchronously, before the
+         main bundle, so the Firebase resolver can read
+         window.__FLEXWEG_CONFIG__ during module init.
+
+         document.write injects a cache-busted script tag during HTML
+         parsing; the browser processes it synchronously before the
+         next <script>. A plain `<script src="./config.js">` would be
+         subject to HTTP / CDN caching, and after the first-run setup
+         uploads a populated config.js to Flexweg, the very next reload
+         could serve the stale (null-stub) version from cache —
+         re-displaying the SetupForm instead of the authenticated app.
+         The ?_t timestamp forces a fresh fetch on every load.
+         See public/config.js for the file contents. -->
+    <script>
+      document.write(
+        '<script src="./config.js?_t=' + Date.now() + '"><\/script>'
+      );
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

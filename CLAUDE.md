@@ -19,11 +19,34 @@ The built `dist/` directory is **committed to the repo** and is the deploy artif
 
 There is no test runner, linter, or formatter wired up — don't invent one. The TypeScript compiler is the only static analysis pass; a build that doesn't typecheck won't produce a bundle.
 
-The Firebase env vars are inlined into the bundle at build time, so `.env` is required on the build machine but **not** on the host serving `dist/`.
+`.env` is **optional**: the app can also be configured at runtime through the in-app first-run **SetupForm** (see "Runtime config & first-run setup" below). If the developer has `VITE_FIREBASE_*` + `VITE_ADMIN_EMAIL` filled in `.env`, Vite bakes them into the bundle and the SetupForm never shows. If `.env` is empty (typical for a fresh `dist/` dropped on Flexweg by a non-developer), the app renders the SetupForm on first load and writes a populated `<folder>/config.js` to Flexweg on success — every browser thereafter reads the config from that file synchronously before the bundle boots.
 
-## Firebase configuration
+## Runtime config & first-run setup
 
-Firebase credentials are read from `VITE_FIREBASE_*` env vars (see `.env.example`). [src/services/firebase.ts](src/services/firebase.ts) lazily initializes the app via `getDb()` and exposes `getMissingFirebaseEnvVars()`. [src/App.tsx](src/App.tsx) calls that on mount and renders an `ErrorScreen` instead of the app when any var is missing — preserve that guard. After editing `.env`, the dev server must be restarted.
+The app reads its Firebase config + admin email through one resolver that converges two sources of truth:
+
+1. **`window.__FLEXWEG_CONFIG__`** — set synchronously by `/config.js` (loaded via a plain `<script>` in `index.html` *before* the main bundle). The bundled `public/config.js` ships as `window.__FLEXWEG_CONFIG__ = null;` — the SetupForm rewrites it on Flexweg with real values once the user fills the form.
+2. **`import.meta.env.VITE_FIREBASE_*` + `VITE_ADMIN_EMAIL`** — Vite-injected from `.env` at build time (or served live during `npm run dev`). Legacy / dev path.
+
+[src/lib/runtimeConfig.ts](src/lib/runtimeConfig.ts) exposes `getRuntimeConfig()` which checks (1), then (2), and caches the result. [src/services/firebase.ts](src/services/firebase.ts) reads exclusively through this resolver — no direct `import.meta.env` access remains. [src/App.tsx](src/App.tsx) short-circuits to `<SetupForm />` (skipping `<AuthProvider>` etc.) when the resolver returns `null`.
+
+The SetupForm flow ([src/pages/SetupForm.tsx](src/pages/SetupForm.tsx)) is a three-step wizard:
+
+1. **Welcome** — primes the user on the Firebase + Flexweg prerequisites and links to the official Firebase setup guide.
+2. **Firebase** — collects the 6 web-app config fields + bootstrap admin email + password, then:
+   1. `initFirebaseFromSetup` populates `window.__FLEXWEG_CONFIG__` + initialises the SDK with the form's values (so subsequent Firestore writes see the same instance).
+   2. `signInWithEmailAndPassword` validates the credentials against Firebase Auth.
+   3. Email match: confirms `auth.currentUser.email === form.adminEmail` (catches typos).
+   4. Transitions to the Flexweg sub-step; no Firestore or Flexweg write yet, so users can bail without leaving stale state.
+3. **Flexweg** — collects Flexweg API key + site URL + API base URL, then:
+   1. `testFlexwegConnection` pings `/files/storage-limits` to verify the key.
+   2. Writes `config/flexweg` to Firestore so the attachments service works out of the box — the admin doesn't have to revisit Settings to wire up uploads.
+   3. `uploadConfigJs` writes a serialised `window.__FLEXWEG_CONFIG__ = {…}` to `<folder>/config.js` on Flexweg. The folder is auto-detected from `window.location.pathname` via [src/lib/adminBase.ts](src/lib/adminBase.ts), so the kanban can live at any path on the Flexweg site (`/kanban/`, `/tickets/`, `/erf34f654GH3/`, or even the site root).
+   4. Reloads with a cache-buster (`?_setup=<timestamp>`) — next boot fetches the freshly-uploaded `config.js`, the resolver picks the values up via `readFromGlobal()`, and the app boots into the normal authenticated path.
+
+The setup helpers in [src/lib/setupApi.ts](src/lib/setupApi.ts) are intentionally separate from [src/services/attachments.ts](src/services/attachments.ts) / [src/services/flexwegConfig.ts](src/services/flexwegConfig.ts): those modules resolve the Flexweg API key from Firestore (`config/flexweg`), which doesn't yet exist during first-run setup. The setup helpers accept the credentials as explicit arguments and call `fetch` directly. After setup completes and the admin reloads, every Flexweg call goes through the regular modules again — `setupApi.ts` is dormant for the lifetime of the deployment.
+
+The kanban is **Flexweg-only by design**. Other static hosts (Vercel, Netlify, GitHub Pages) won't accept the `uploadConfigJs` POST, so the setup would fail. If you want to deploy elsewhere, bake `.env` at build time instead — the import-meta-env path bypasses the SetupForm entirely.
 
 Env vars are typed in [src/vite-env.d.ts](src/vite-env.d.ts) (the `ImportMetaEnv` augmentation). Add new `VITE_*` entries there and `import.meta.env.VITE_FOO` becomes typed everywhere.
 
@@ -33,13 +56,23 @@ Firestore collections: `tickets`, `sprints`, `users`, and the `config/` collecti
 
 The app is gated behind Firebase Auth (email/password). [src/context/AuthContext.tsx](src/context/AuthContext.tsx) wraps everything; until the first `onAuthStateChanged` resolves, the app shows a spinner instead of the login page (otherwise we'd flash the login during session restoration from localStorage).
 
-The **bootstrap admin** is configured via `VITE_ADMIN_EMAIL` in `.env`. That account is treated as admin without needing a `users/{uid}` Firestore record — it solves the chicken-and-egg of needing an admin to bootstrap. The Firestore rules duplicate this email (rules can't read env vars). Changing the bootstrap admin = update both `.env` and the rules.
+The **bootstrap admin** email is read from the runtime config (`getRuntimeConfig().adminEmail` via [src/services/firebase.ts](src/services/firebase.ts)`.getAdminEmail()`). The value comes from `.env` (`VITE_ADMIN_EMAIL`) when the build was configured locally, or from the populated `<folder>/config.js` uploaded by the SetupForm to Flexweg on first run. That account is treated as admin without needing a `users/{uid}` Firestore record — it solves the chicken-and-egg of needing an admin to bootstrap. The Firestore rules duplicate this email (rules can't read env vars or fetched files). Changing the bootstrap admin = update the runtime source AND the rules.
 
 Other members are mirrored in a Firestore `users` collection (doc id = `auth.uid`, fields `{ email, role, disabled, createdAt, createdBy }`). On a new user's **first** sign-in, the client calls `ensureSelfUserRecord` which `setDoc`s their record with `role: "user"` (rules allow self-create with that exact shape only).
 
 User lifecycle is intentionally split: the Firebase Auth account is created **manually in the Firebase Console** (the client SDK can't create another user without logging the admin out, and we explicitly avoided the secondary-app workaround). Everything else — role changes, disable/enable, password reset, removal — happens from the in-app `/users` page (admin-only). True deletion of an Auth account still requires a manual click in the console; the in-app "Remove" only deletes the Firestore record.
 
 `AuthenticatedShell` in [src/App.tsx](src/App.tsx) ensures `<AppDataProvider>` only mounts when a non-disabled user is authenticated, so Firestore subscriptions never fire before auth is ready. `<RequireAdmin>` guards `/users`. Layout components ([Sidebar.tsx](src/components/layout/Sidebar.tsx) / [Topbar.tsx](src/components/layout/Topbar.tsx)) hide the Users link for non-admins and surface the Sign-out button + current user's email.
+
+## Internationalisation
+
+The admin UI ships translated into 7 locales — `en` (default), `fr`, `de`, `es`, `nl`, `pt`, `ko`. Resolution order at boot: `localStorage.kanbanLocale` → `navigator.language` two-letter prefix → `DEFAULT_LOCALE` (`en`). Changes flow through `setActiveLocale(locale)` in [src/i18n/index.ts](src/i18n/index.ts) which updates both i18next and localStorage.
+
+All translation keys are in English; `en.json` is the source of truth and i18next falls back to it for any missing key. Adding a new locale = create `src/i18n/<code>.json` mirroring `en.json`'s structure, register it in [src/i18n/index.ts](src/i18n/index.ts) (`SUPPORTED_LOCALES`, `LOCALE_LABELS`, `LOCALE_FLAGS`, the `resources` block and `AppLocale` union).
+
+UI strings in user-facing components go through `t()`. The SetupForm is fully translated; the rest of the app is being migrated incrementally — when adding a new string to a translated component, add the key to all 7 bundles to keep them in sync. [src/components/ui/LocaleSwitcher.tsx](src/components/ui/LocaleSwitcher.tsx) is a compact chip (flag + invisible native `<select>`) — drop it anywhere a user might want to switch language.
+
+Persistence is browser-scoped (no `users/{uid}.preferences.adminLocale` field today, unlike the CMS sibling — kanban's user record stays `{ email, role, disabled, createdAt, createdBy }`). If team-wide locale becomes a requirement, add the field on the user record + a Firestore-rules clause and mirror the CMS's `setUserPreferences` flow.
 
 ## Architecture
 
@@ -171,3 +204,4 @@ Public download URLs are bare static-asset URLs (`https://your-site.flexweg.com/
 - Strict TypeScript (`strict: true`, `noUnusedLocals`, `noUnusedParameters`). Domain types live in [src/types.ts](src/types.ts); add new shapes there rather than inline `Record<string, unknown>`.
 - Firestore data is cast to domain types only inside the `services/` layer (boundary). Don't re-cast in components / pages.
 - Collection/doc names are centralized in `collections` and `configDocs` exports of [src/services/firebase.ts](src/services/firebase.ts) — reference them rather than hardcoding strings.
+- UI strings on translated components must go through `t()` from `react-i18next` and exist in all 7 bundles under `src/i18n/`. English (`en.json`) is the source of truth; missing keys in other locales fall back to English automatically.

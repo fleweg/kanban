@@ -1,0 +1,114 @@
+{
+  "common": {
+    "language": "Idioma",
+    "back": "Voltar",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "saving": "A guardar…"
+  },
+  "login": {
+    "brandSubtitle": "Sprints e backlog",
+    "cardTitle": "Iniciar sessão",
+    "cardSubtitle": "Use o seu e-mail profissional e a sua palavra-passe.",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "voce@empresa.com",
+    "passwordLabel": "Palavra-passe",
+    "passwordPlaceholder": "••••••••",
+    "submit": "Iniciar sessão",
+    "submitting": "A iniciar sessão…",
+    "forgot": "Esqueceu-se da palavra-passe?",
+    "resetSent": "E-mail de redefinição enviado para {{email}}.",
+    "errors": {
+      "missingFields": "O e-mail e a palavra-passe são obrigatórios.",
+      "missingEmailForReset": "Introduza o seu e-mail acima antes de clicar em redefinir."
+    },
+    "footer": "Os pedidos de conta passam pelo seu administrador."
+  },
+  "setup": {
+    "title": "Configuração do Kanban",
+    "subtitle": "Configuração inicial",
+    "footer": "A configuração é carregada para o seu site Flexweg como config.js. Voltar a executar o formulário substitui-a.",
+    "stepper": {
+      "welcome": "Bem-vindo",
+      "firebase": "Firebase",
+      "flexweg": "Flexweg"
+    },
+    "welcome": {
+      "heading": "Bem-vindo ao seu Kanban",
+      "intro": "Esta configuração inicial liga o Kanban a um projeto Firebase para os dados e a autenticação, e depois ao seu site Flexweg para os anexos dos tickets. Demora cerca de dois minutos assim que tiver um projeto Firebase.",
+      "firebaseTitle": "Projeto Firebase necessário",
+      "firebaseBody": "O Kanban necessita de um projeto Firebase gratuito (o Spark plan é suficiente — sem faturação). Vai precisar da Web app config e de um utilizador Authentication que se tornará o admin bootstrap. O início de sessão Email/Password tem de estar ativado.",
+      "tutorialUrl": "https://firebase.google.com/docs/web/setup",
+      "tutorialButton": "Guia de configuração do Firebase",
+      "haveAccountButton": "Tenho um projeto Firebase"
+    },
+    "sections": {
+      "firebase": "Firebase",
+      "admin": "Admin bootstrap",
+      "flexweg": "Flexweg"
+    },
+    "intro": "Introduza a configuração Firebase Web app e o e-mail do admin bootstrap. O admin já tem de existir como utilizador Firebase Auth — crie-o primeiro manualmente na Firebase Console.",
+    "introFlexweg": "Indique a sua chave API Flexweg — o Kanban usa a API Files do Flexweg para carregar os anexos dos tickets E para persistir a configuração, de modo que o navegador de cada membro da equipa arranque sem ter de voltar a preencher este formulário.",
+    "help": {
+      "firebase": "Copie estes valores em Firebase Console → Project settings → Your apps → Web app config.",
+      "admin": "O utilizador Firebase Auth que obtém direitos de admin sem necessitar de um registo Firestore users/{uid}. Já tem de existir — crie-o em Firebase Console → Authentication → Users.",
+      "flexweg": "Encontre estes valores no painel da sua conta Flexweg.",
+      "flexwegApiKeyHint": "Gere uma chave API permanente nas",
+      "flexwegApiKeyLink": "definições da sua conta Flexweg"
+    },
+    "fields": {
+      "apiKey": "apiKey",
+      "authDomain": "authDomain",
+      "projectId": "projectId",
+      "storageBucket": "storageBucket",
+      "messagingSenderId": "messagingSenderId",
+      "appId": "appId",
+      "adminEmail": "E-mail do admin",
+      "adminPassword": "Palavra-passe do admin",
+      "flexwegApiKey": "Chave API",
+      "flexwegSiteUrl": "URL do site",
+      "flexwegApiBaseUrl": "URL base da API"
+    },
+    "steps": {
+      "signIn": "A iniciar sessão no Firebase…",
+      "verifyEmail": "A verificar o e-mail do admin…",
+      "testFlexweg": "A testar a chave API Flexweg…",
+      "writeFirestore": "A escrever config/flexweg no Firestore…",
+      "uploadConfig": "A carregar config.js para o Flexweg…"
+    },
+    "stepsDone": {
+      "signIn": "Sessão iniciada no Firebase",
+      "verifyEmail": "E-mail do admin verificado",
+      "testFlexweg": "Chave API Flexweg verificada",
+      "writeFirestore": "Configuração do Firestore guardada",
+      "uploadConfig": "config.js carregado"
+    },
+    "continueToFlexweg": "Continuar para o Flexweg",
+    "submit": "Concluir configuração",
+    "submitting": "A configurar…",
+    "success": "Tudo pronto!",
+    "reloadingHint": "A recarregar o Kanban…",
+    "errors": {
+      "missingFields": "Faltam alguns campos obrigatórios ou são inválidos.",
+      "firebaseAuthInvalidCredential": "E-mail ou palavra-passe incorretos.",
+      "firebaseAuthInvalidCredentialHint": "Verifique o e-mail e a palavra-passe do admin na Firebase Console (Authentication → Users). O início de sessão Email/Password tem de estar ativado para este projeto.",
+      "wrongAdminEmail": "A conta Firebase com que iniciou sessão não corresponde ao e-mail de admin que introduziu. Tente novamente.",
+      "firebaseAuthUserNotFound": "Nenhuma conta Firebase corresponde a esse e-mail.",
+      "firebaseAuthInvalidEmail": "Formato de e-mail inválido.",
+      "firebaseInvalidApiKey": "A chave API do Firebase é inválida. Verifique o campo apiKey.",
+      "firebaseNetwork": "Erro de rede ao contactar o Firebase.",
+      "firebaseTooManyRequests": "Demasiadas tentativas de início de sessão. Aguarde um minuto e tente novamente.",
+      "firebaseOperationNotAllowed": "O início de sessão Email/Password não está ativado para este projeto Firebase. Ative-o em Firebase Console → Authentication → Sign-in method.",
+      "firebaseUserDisabled": "Esta conta Firebase está desativada.",
+      "firebaseAuthGeneric": "O início de sessão no Firebase falhou.",
+      "flexwegAuth": "Chave API Flexweg recusada. Verifique o valor na sua conta Flexweg → API.",
+      "flexwegNetwork": "Erro de rede ao contactar o Flexweg. Verifique o URL base da API e a sua ligação.",
+      "flexwegHttp": "Erro da API Flexweg (HTTP {{status}}): {{detail}}",
+      "firestoreRulesTitle": "As rules do Firestore recusaram a escrita.",
+      "firestoreRulesHint": "Abra Firebase Console → Firestore → Rules e confirme que o e-mail do admin bootstrap corresponde: {{email}}.",
+      "firestoreOther": "Erro do Firestore",
+      "uploadFailed": "Não foi possível carregar config.js para o Flexweg",
+      "generic": "Ocorreu um erro."
+    }
+  }
+}

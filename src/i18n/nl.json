@@ -1,0 +1,114 @@
+{
+  "common": {
+    "language": "Taal",
+    "back": "Terug",
+    "cancel": "Annuleren",
+    "save": "Opslaan",
+    "saving": "Opslaan…"
+  },
+  "login": {
+    "brandSubtitle": "Sprints & backlog",
+    "cardTitle": "Inloggen",
+    "cardSubtitle": "Gebruik uw werk-e-mail en wachtwoord.",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "u@bedrijf.com",
+    "passwordLabel": "Wachtwoord",
+    "passwordPlaceholder": "••••••••",
+    "submit": "Inloggen",
+    "submitting": "Inloggen…",
+    "forgot": "Wachtwoord vergeten?",
+    "resetSent": "Wachtwoord-reset-e-mail verzonden naar {{email}}.",
+    "errors": {
+      "missingFields": "E-mail en wachtwoord zijn verplicht.",
+      "missingEmailForReset": "Voer eerst uw e-mailadres hierboven in en klik dan op resetten."
+    },
+    "footer": "Accountaanvragen lopen via uw beheerder."
+  },
+  "setup": {
+    "title": "Kanban-installatie",
+    "subtitle": "Eerste configuratie",
+    "footer": "De configuratie wordt als config.js geüpload naar uw Flexweg-site. Het formulier opnieuw uitvoeren overschrijft deze.",
+    "stepper": {
+      "welcome": "Welkom",
+      "firebase": "Firebase",
+      "flexweg": "Flexweg"
+    },
+    "welcome": {
+      "heading": "Welkom bij uw Kanban",
+      "intro": "Deze eerste configuratie koppelt het Kanban aan een Firebase-project voor data en authenticatie, en vervolgens aan uw Flexweg-site voor de bijlagen van tickets. Dit duurt ongeveer twee minuten zodra u een Firebase-project heeft.",
+      "firebaseTitle": "Firebase-project vereist",
+      "firebaseBody": "Het Kanban heeft een gratis Firebase-project nodig (het Spark plan volstaat — geen facturering vereist). U heeft de Web app config nodig plus een Authentication-gebruiker die de bootstrap-admin wordt. Email/Password-aanmelding moet ingeschakeld zijn.",
+      "tutorialUrl": "https://firebase.google.com/docs/web/setup",
+      "tutorialButton": "Firebase-installatiegids",
+      "haveAccountButton": "Ik heb een Firebase-project"
+    },
+    "sections": {
+      "firebase": "Firebase",
+      "admin": "Bootstrap-admin",
+      "flexweg": "Flexweg"
+    },
+    "intro": "Voer uw Firebase Web app config in en het e-mailadres van uw bootstrap-admin. De admin moet al bestaan als Firebase Auth-gebruiker — maak deze eerst handmatig aan in de Firebase Console.",
+    "introFlexweg": "Geef uw Flexweg API-sleutel op — het Kanban gebruikt de Files-API van Flexweg om bijlagen van tickets te uploaden EN om de configuratie te bewaren, zodat de browser van elk teamlid opstart zonder dat dit formulier opnieuw moet worden ingevuld.",
+    "help": {
+      "firebase": "Kopieer deze waarden uit Firebase Console → Project settings → Your apps → Web app config.",
+      "admin": "De Firebase Auth-gebruiker die admin-rechten krijgt zonder een Firestore users/{uid}-record nodig te hebben. Moet al bestaan — maak deze aan via Firebase Console → Authentication → Users.",
+      "flexweg": "U vindt deze waarden in het dashboard van uw Flexweg-account.",
+      "flexwegApiKeyHint": "Genereer een permanente API-sleutel in uw",
+      "flexwegApiKeyLink": "Flexweg-accountinstellingen"
+    },
+    "fields": {
+      "apiKey": "apiKey",
+      "authDomain": "authDomain",
+      "projectId": "projectId",
+      "storageBucket": "storageBucket",
+      "messagingSenderId": "messagingSenderId",
+      "appId": "appId",
+      "adminEmail": "Admin-e-mail",
+      "adminPassword": "Admin-wachtwoord",
+      "flexwegApiKey": "API-sleutel",
+      "flexwegSiteUrl": "Site-URL",
+      "flexwegApiBaseUrl": "API-basis-URL"
+    },
+    "steps": {
+      "signIn": "Inloggen bij Firebase…",
+      "verifyEmail": "Admin-e-mail verifiëren…",
+      "testFlexweg": "Flexweg API-sleutel testen…",
+      "writeFirestore": "config/flexweg naar Firestore schrijven…",
+      "uploadConfig": "config.js uploaden naar Flexweg…"
+    },
+    "stepsDone": {
+      "signIn": "Ingelogd bij Firebase",
+      "verifyEmail": "Admin-e-mail geverifieerd",
+      "testFlexweg": "Flexweg API-sleutel geverifieerd",
+      "writeFirestore": "Firestore-configuratie opgeslagen",
+      "uploadConfig": "config.js geüpload"
+    },
+    "continueToFlexweg": "Doorgaan naar Flexweg",
+    "submit": "Installatie voltooien",
+    "submitting": "Configureren…",
+    "success": "Klaar!",
+    "reloadingHint": "Kanban wordt herladen…",
+    "errors": {
+      "missingFields": "Sommige verplichte velden ontbreken of zijn ongeldig.",
+      "firebaseAuthInvalidCredential": "Onjuist e-mailadres of wachtwoord.",
+      "firebaseAuthInvalidCredentialHint": "Controleer de admin-e-mail en het wachtwoord in de Firebase Console (Authentication → Users). Email/Password-aanmelding moet ingeschakeld zijn voor dit project.",
+      "wrongAdminEmail": "Het Firebase-account waarmee u bent ingelogd komt niet overeen met de admin-e-mail die u heeft ingevoerd. Probeer het opnieuw.",
+      "firebaseAuthUserNotFound": "Geen Firebase-account komt overeen met dat e-mailadres.",
+      "firebaseAuthInvalidEmail": "Ongeldig e-mailformaat.",
+      "firebaseInvalidApiKey": "Firebase API-sleutel is ongeldig. Controleer het apiKey-veld.",
+      "firebaseNetwork": "Netwerkfout bij contact met Firebase.",
+      "firebaseTooManyRequests": "Te veel aanmeldpogingen. Wacht een minuut en probeer het opnieuw.",
+      "firebaseOperationNotAllowed": "Email/Password-aanmelding is niet ingeschakeld voor dit Firebase-project. Schakel het in via Firebase Console → Authentication → Sign-in method.",
+      "firebaseUserDisabled": "Dit Firebase-account is uitgeschakeld.",
+      "firebaseAuthGeneric": "Firebase-aanmelding mislukt.",
+      "flexwegAuth": "Flexweg API-sleutel geweigerd. Controleer de waarde in uw Flexweg-account → API.",
+      "flexwegNetwork": "Netwerkfout bij contact met Flexweg. Controleer de API-basis-URL en uw verbinding.",
+      "flexwegHttp": "Flexweg API-fout (HTTP {{status}}): {{detail}}",
+      "firestoreRulesTitle": "Firestore-rules hebben het schrijven geweigerd.",
+      "firestoreRulesHint": "Open Firebase Console → Firestore → Rules en bevestig dat de bootstrap-admin-e-mail overeenkomt: {{email}}.",
+      "firestoreOther": "Firestore-fout",
+      "uploadFailed": "Kan config.js niet uploaden naar Flexweg",
+      "generic": "Er is iets misgegaan."
+    }
+  }
+}
