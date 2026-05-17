@@ -31,7 +31,43 @@
     "stepper": {
       "welcome": "Bienvenue",
       "firebase": "Firebase",
-      "flexweg": "Flexweg"
+      "flexweg": "Flexweg",
+      "terms": "CGU"
+    },
+    "terms": {
+      "title": "Conditions générales d'utilisation",
+      "intro": "Merci de lire et d'accepter les conditions ci-dessous avant d'utiliser Flexweg Kanban. Elles sont rédigées en langage clair pour être rapides à lire.",
+      "section1": {
+        "title": "1. Service gratuit",
+        "body": "Flexweg Kanban est mis à votre disposition gratuitement par Flexweg. Vous pouvez l'utiliser sans limite avec votre hébergement Flexweg — Flexweg ne vous facturera jamais l'utilisation du Kanban lui-même. Les frais habituels de votre offre d'hébergement Flexweg et de votre plan Firebase restent applicables, chacun sur le compte concerné."
+      },
+      "section2": {
+        "title": "2. Service fourni « en l'état », sans garantie",
+        "body": "Le Kanban est fourni en l'état. Nous travaillons à le garder stable et à l'améliorer dans le temps, mais nous ne pouvons garantir qu'il sera exempt de bugs, de défauts ou d'interruptions. Utilisez-le avec la même prudence qu'un outil que vous n'avez pas écrit vous-même : conservez des sauvegardes de vos contenus importants."
+      },
+      "section3": {
+        "title": "3. Vos contenus, votre responsabilité",
+        "body": "Vous êtes seul responsable des contenus que vous publiez via le Kanban — textes, images, vidéos, formulaires, intégrations de code, et tout autre média. Vous devez respecter la loi applicable dans votre juridiction (et dans celles que vous ciblez), les droits d'auteur, les droits à l'image et à la personnalité, les règles de protection des données personnelles, ainsi que les conditions de tout service tiers utilisé (polices intégrées, vidéos, etc.). Flexweg n'est pas responsable des contenus publiés par les utilisateurs du Kanban."
+      },
+      "section4": {
+        "title": "4. Votre compte Firebase, votre sécurité",
+        "body": "Le Kanban stocke ses données dans votre propre projet Firebase. Vous êtes responsable de la sécurité de ce projet : choisissez un mot de passe robuste pour le compte administrateur initial, configurez les règles Firestore comme documenté, faites tourner vos clés API si nécessaire, et contrôlez qui y a accès. Flexweg ne pourra en aucun cas être tenu responsable d'un accès non autorisé, d'une fuite de données, d'un piratage ou d'une perte résultant d'une mauvaise configuration ou d'une compromission de votre compte Firebase."
+      },
+      "section5": {
+        "title": "5. Limitation de responsabilité",
+        "body": "Flexweg ne pourra être tenu responsable d'aucune perte de revenus, perte de données, perte d'opportunité commerciale, ni d'aucun dommage direct ou indirect lié à l'utilisation, au mauvais usage ou à l'indisponibilité du Kanban. Lorsque la loi applicable impose à Flexweg une responsabilité, celle-ci est limitée au montant effectivement payé à Flexweg pour le Kanban au cours des 12 derniers mois — soit zéro, le Kanban étant gratuit."
+      },
+      "section6": {
+        "title": "6. Vos données restent les vôtres",
+        "body": "Les contenus que vous créez avec Flexweg Kanban sont stockés dans votre propre projet Firebase (tickets, sprints, commentaires, fiches utilisateurs, configuration du workflow) et sur votre propre hébergement Flexweg (pièces jointes des tickets uploadées via l'API Files). Flexweg Kanban lui-même ne transmet vos contenus à aucun service tiers."
+      },
+      "section7": {
+        "title": "7. Bon usage",
+        "body": "L'utilisation du Kanban pour des activités illégales, frauduleuses ou nuisibles, ou contraires aux conditions générales d'utilisation de Flexweg, peut entraîner la suspension de votre accès à l'hébergement Flexweg. Nous pouvons également mettre à jour les présentes conditions ; les changements significatifs seront communiqués via l'admin ou par email."
+      },
+      "accept": "J'ai lu et j'accepte les CGU.",
+      "continue": "Continuer vers la configuration",
+      "back": "Retour"
     },
     "welcome": {
       "heading": "Bienvenue dans votre Kanban",

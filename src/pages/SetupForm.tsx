@@ -122,7 +122,7 @@ function authErrorTranslationKey(err: unknown): string {
   }
 }
 
-type WizardStep = "welcome" | "firebase" | "flexweg";
+type WizardStep = "welcome" | "terms" | "firebase" | "flexweg";
 
 export function SetupForm() {
   const { t } = useTranslation();
@@ -444,7 +444,12 @@ export function SetupForm() {
         <Stepper currentStep={wizardStep} />
 
         {wizardStep === "welcome" ? (
-          <WelcomeStep onContinue={() => setWizardStep("firebase")} />
+          <WelcomeStep onContinue={() => setWizardStep("terms")} />
+        ) : wizardStep === "terms" ? (
+          <TermsStep
+            onAccept={() => setWizardStep("firebase")}
+            onBack={() => setWizardStep("welcome")}
+          />
         ) : wizardStep === "firebase" ? (
           <div className="card p-6">
             <p className="text-sm text-surface-600 dark:text-surface-300">
@@ -543,7 +548,7 @@ export function SetupForm() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
-                  onClick={() => setWizardStep("welcome")}
+                  onClick={() => setWizardStep("terms")}
                   className="btn-secondary flex-1 justify-center"
                   disabled={submitting || done}
                 >
@@ -661,6 +666,7 @@ function Stepper({ currentStep }: StepperProps) {
   const { t } = useTranslation();
   const steps: Array<{ id: WizardStep; label: string }> = [
     { id: "welcome", label: t("setup.stepper.welcome") },
+    { id: "terms", label: t("setup.stepper.terms") },
     { id: "firebase", label: t("setup.stepper.firebase") },
     { id: "flexweg", label: t("setup.stepper.flexweg") },
   ];
@@ -753,6 +759,75 @@ function WelcomeStep({ onContinue }: WelcomeStepProps) {
           className="btn-primary flex-1 justify-center"
         >
           {t("setup.welcome.haveAccountButton")}
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface TermsStepProps {
+  onAccept: () => void;
+  onBack: () => void;
+}
+
+// 7-section terms wall, mirroring the CMS sibling. Each section's title +
+// body is i18n'd under setup.terms.section{N}.{title,body} so we map over
+// a fixed range without changing this component when the text is edited.
+const TERMS_SECTION_COUNT = 7;
+
+function TermsStep({ onAccept, onBack }: TermsStepProps) {
+  const { t } = useTranslation();
+  const [accepted, setAccepted] = useState(false);
+  return (
+    <div className="card p-6">
+      <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-50">
+        {t("setup.terms.title")}
+      </h2>
+      <p className="text-sm text-surface-600 dark:text-surface-300 mt-3">
+        {t("setup.terms.intro")}
+      </p>
+
+      <div className="mt-5 max-h-80 overflow-y-auto pr-2 space-y-4 rounded-lg border border-surface-200 bg-surface-50 p-4 dark:border-surface-700 dark:bg-surface-900/40">
+        {Array.from({ length: TERMS_SECTION_COUNT }, (_, i) => i + 1).map((n) => (
+          <section key={n}>
+            <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-50">
+              {t(`setup.terms.section${n}.title`)}
+            </h3>
+            <p className="text-xs text-surface-600 dark:text-surface-300 mt-1.5 leading-relaxed">
+              {t(`setup.terms.section${n}.body`)}
+            </p>
+          </section>
+        ))}
+      </div>
+
+      <label className="mt-5 flex items-start gap-2.5 cursor-pointer">
+        <input
+          type="checkbox"
+          className="mt-0.5 h-4 w-4 rounded border-surface-300 text-blue-600 focus:ring-blue-500 dark:border-surface-600 dark:bg-surface-800"
+          checked={accepted}
+          onChange={(e) => setAccepted(e.target.checked)}
+        />
+        <span className="text-sm text-surface-700 dark:text-surface-200">
+          {t("setup.terms.accept")}
+        </span>
+      </label>
+
+      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="btn-secondary flex-1 justify-center"
+        >
+          {t("common.back")}
+        </button>
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={!accepted}
+          className="btn-primary flex-1 justify-center"
+        >
+          {t("setup.terms.continue")}
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>

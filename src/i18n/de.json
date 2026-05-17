@@ -31,7 +31,43 @@
     "stepper": {
       "welcome": "Willkommen",
       "firebase": "Firebase",
-      "flexweg": "Flexweg"
+      "flexweg": "Flexweg",
+      "terms": "AGB"
+    },
+    "terms": {
+      "title": "Nutzungsbedingungen",
+      "intro": "Bitte lesen und akzeptieren Sie die folgenden Bedingungen, bevor Sie Flexweg Kanban verwenden. Sie sind in einfacher Sprache verfasst, um schnell lesbar zu sein.",
+      "section1": {
+        "title": "1. Kostenloser Service",
+        "body": "Flexweg Kanban wird Ihnen von Flexweg kostenlos zur Verfügung gestellt. Sie können es ohne Einschränkungen mit Ihrem Flexweg-Hosting nutzen — Flexweg wird Ihnen die Nutzung des Kanban selbst niemals in Rechnung stellen. Die üblichen Gebühren Ihres Flexweg-Hosting-Plans und Ihres Firebase-Plans bleiben weiterhin anwendbar, jeweils auf dem entsprechenden Konto."
+      },
+      "section2": {
+        "title": "2. Bereitstellung „wie besehen“, ohne Garantie",
+        "body": "Das Kanban wird wie besehen bereitgestellt. Wir arbeiten daran, es stabil zu halten und im Laufe der Zeit zu verbessern, können jedoch nicht garantieren, dass es frei von Bugs, Mängeln oder Unterbrechungen ist. Verwenden Sie es mit derselben Vorsicht wie bei jedem Tool, das Sie nicht selbst geschrieben haben: Bewahren Sie Backups wichtiger Inhalte auf."
+      },
+      "section3": {
+        "title": "3. Ihre Inhalte, Ihre Verantwortung",
+        "body": "Sie sind allein verantwortlich für die Inhalte, die Sie über das Kanban veröffentlichen — Texte, Bilder, Videos, Formulare, Code-Einbettungen und alle anderen Medien. Sie müssen das anwendbare Recht in Ihrer Jurisdiktion (und in den von Ihnen anvisierten Jurisdiktionen) einhalten, ebenso wie Urheberrechte, Bild- und Persönlichkeitsrechte, Datenschutzbestimmungen sowie die Bedingungen jeglicher Drittanbieterdienste (z. B. eingebettete Schriften oder Videos). Flexweg ist nicht verantwortlich für die von den Nutzern des Kanban veröffentlichten Inhalte."
+      },
+      "section4": {
+        "title": "4. Ihr Firebase-Konto, Ihre Sicherheit",
+        "body": "Das Kanban speichert seine Daten in Ihrem eigenen Firebase-Projekt. Sie sind für die Sicherheit dieses Projekts verantwortlich: Wählen Sie ein starkes Passwort für das Bootstrap-Administratorkonto, konfigurieren Sie die Firestore-Sicherheitsregeln wie dokumentiert, rotieren Sie Ihre API-Schlüssel bei Bedarf und prüfen Sie, wer Zugriff hat. Flexweg kann in keinem Fall für unbefugten Zugriff, Datenlecks, Hacks oder Verluste haftbar gemacht werden, die durch Fehlkonfiguration oder Kompromittierung Ihres Firebase-Kontos entstehen."
+      },
+      "section5": {
+        "title": "5. Haftungsbeschränkung",
+        "body": "Flexweg kann nicht haftbar gemacht werden für Einnahmeverluste, Datenverluste, entgangene Geschäftsmöglichkeiten oder direkte oder indirekte Schäden, die aus der Nutzung, dem Missbrauch oder der Nichtverfügbarkeit des Kanban entstehen. Soweit das anwendbare Recht eine Haftung von Flexweg vorschreibt, ist diese auf den Betrag beschränkt, der tatsächlich in den letzten 12 Monaten an Flexweg für das Kanban gezahlt wurde — also null, da das Kanban kostenlos ist."
+      },
+      "section6": {
+        "title": "6. Ihre Daten bleiben Ihnen",
+        "body": "Inhalte, die Sie mit Flexweg Kanban erstellen, werden in Ihrem eigenen Firebase-Projekt (Tickets, Sprints, Kommentare, Benutzerdaten, Workflow-Konfiguration) und auf Ihrem eigenen Flexweg-Hosting (über die Files-API hochgeladene Ticket-Anhänge) gespeichert. Flexweg Kanban selbst übermittelt Ihre Inhalte an keinen Drittanbieterdienst."
+      },
+      "section7": {
+        "title": "7. Faire Nutzung",
+        "body": "Die Nutzung des Kanban für rechtswidrige, betrügerische oder schädliche Aktivitäten oder auf eine Weise, die gegen die allgemeinen Nutzungsbedingungen von Flexweg verstößt, kann zur Sperrung Ihres Zugriffs auf das Flexweg-Hosting führen. Wir können diese Kanban-Bedingungen auch im Laufe der Zeit aktualisieren; wesentliche Änderungen werden über das Admin-Panel oder per E-Mail kommuniziert."
+      },
+      "accept": "Ich habe die Nutzungsbedingungen gelesen und akzeptiere sie.",
+      "continue": "Weiter zur Konfiguration",
+      "back": "Zurück"
     },
     "welcome": {
       "heading": "Willkommen in Ihrem Kanban",

@@ -31,7 +31,43 @@
     "stepper": {
       "welcome": "Welcome",
       "firebase": "Firebase",
-      "flexweg": "Flexweg"
+      "flexweg": "Flexweg",
+      "terms": "Terms"
+    },
+    "terms": {
+      "title": "Terms of use",
+      "intro": "Please read and accept the terms below before using Flexweg Kanban. They are written in plain language to be quick to read.",
+      "section1": {
+        "title": "1. Free service",
+        "body": "Flexweg Kanban is provided to you free of charge by Flexweg. You can use it without limits with your Flexweg hosting — Flexweg will never bill you for using the Kanban itself. Standard charges for your Flexweg hosting plan and your Firebase plan still apply, on the respective accounts you own."
+      },
+      "section2": {
+        "title": "2. Provided as-is, no warranty",
+        "body": "The Kanban is provided as-is. We work to keep it stable and improve it over time, but we cannot guarantee it will be free of bugs, defects or interruptions. Use it with the same caution you would any tool you didn't write yourself: keep backups of important content."
+      },
+      "section3": {
+        "title": "3. Your content, your responsibility",
+        "body": "You are solely responsible for the content you publish through the Kanban — text, images, videos, forms, code embeds, and any other media. You must comply with applicable law in your jurisdiction (and in the jurisdictions you target), copyright, image and personality rights, personal data protection rules, and any third-party terms (e.g. embedded fonts or videos). Flexweg is not responsible for content published by users of the Kanban."
+      },
+      "section4": {
+        "title": "4. Your Firebase account, your security",
+        "body": "The Kanban stores its data in your own Firebase project. You are responsible for securing that project: choose a strong password for the bootstrap admin account, set up Firestore security rules as documented, rotate your API keys when needed, and review who has access. Flexweg cannot be held responsible for unauthorised access, data leaks, hacks or losses caused by misconfiguration or compromise of your Firebase account."
+      },
+      "section5": {
+        "title": "5. Limitation of liability",
+        "body": "Flexweg cannot be held responsible for any loss of revenue, loss of data, loss of business opportunity, or any direct or indirect damages arising from the use, misuse, or unavailability of the Kanban. Where applicable law requires Flexweg to assume some liability for the Kanban, that liability is limited to the amount actually paid to Flexweg for the Kanban over the past 12 months — which is zero, since the Kanban is free."
+      },
+      "section6": {
+        "title": "6. Your data stays yours",
+        "body": "Content you create with Flexweg Kanban is stored in your own Firebase project (tickets, sprints, comments, user records, workflow configuration) and on your own Flexweg hosting (ticket attachments uploaded via the Files API). Flexweg Kanban itself does not transmit your content to any third-party service."
+      },
+      "section7": {
+        "title": "7. Fair use",
+        "body": "Use of the Kanban for unlawful, fraudulent, or harmful activities, or in ways that breach Flexweg's general terms of use, may result in suspension of your Flexweg hosting access. We may also update these Kanban terms over time; significant changes will be communicated through the admin or via email."
+      },
+      "accept": "I have read and accept the Terms of use.",
+      "continue": "Continue to configuration",
+      "back": "Back"
     },
     "welcome": {
       "heading": "Welcome to your Kanban",

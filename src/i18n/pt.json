@@ -31,7 +31,43 @@
     "stepper": {
       "welcome": "Bem-vindo",
       "firebase": "Firebase",
-      "flexweg": "Flexweg"
+      "flexweg": "Flexweg",
+      "terms": "Condições"
+    },
+    "terms": {
+      "title": "Condições de utilização",
+      "intro": "Lê e aceita as condições abaixo antes de utilizar o Flexweg Kanban. Estão escritas em linguagem clara para serem rápidas de ler.",
+      "section1": {
+        "title": "1. Serviço gratuito",
+        "body": "O Flexweg Kanban é disponibilizado gratuitamente pelo Flexweg. Podes utilizá-lo sem limites com o teu alojamento Flexweg — o Flexweg nunca te vai cobrar pelo uso do Kanban em si. As tarifas habituais do teu plano de alojamento Flexweg e do teu plano Firebase mantêm-se aplicáveis, cada uma na conta correspondente."
+      },
+      "section2": {
+        "title": "2. Fornecido «tal como está», sem garantia",
+        "body": "O Kanban é fornecido tal como está. Trabalhamos para o manter estável e melhorá-lo ao longo do tempo, mas não podemos garantir que esteja livre de bugs, defeitos ou interrupções. Utiliza-o com a mesma cautela que terias com qualquer ferramenta que não tenhas escrito tu próprio: mantém cópias de segurança dos conteúdos importantes."
+      },
+      "section3": {
+        "title": "3. Os teus conteúdos, a tua responsabilidade",
+        "body": "És o único responsável pelos conteúdos que publicas através do Kanban — textos, imagens, vídeos, formulários, integrações de código e quaisquer outros media. Deves cumprir a lei aplicável na tua jurisdição (e nas que visas), os direitos de autor, os direitos de imagem e de personalidade, as regras de proteção de dados pessoais e as condições de quaisquer serviços de terceiros que utilizes (fontes incorporadas, vídeos, etc.). O Flexweg não é responsável pelos conteúdos publicados pelos utilizadores do Kanban."
+      },
+      "section4": {
+        "title": "4. A tua conta Firebase, a tua segurança",
+        "body": "O Kanban guarda os seus dados no teu próprio projeto Firebase. És responsável pela segurança desse projeto: escolhe uma palavra-passe forte para a conta de administrador inicial, configura as regras de segurança do Firestore como documentado, faz rotação das tuas chaves API quando necessário e verifica quem tem acesso. O Flexweg não pode em caso algum ser responsabilizado por acessos não autorizados, fugas de dados, ataques informáticos ou perdas resultantes de uma má configuração ou comprometimento da tua conta Firebase."
+      },
+      "section5": {
+        "title": "5. Limitação de responsabilidade",
+        "body": "O Flexweg não pode ser responsabilizado por qualquer perda de receitas, perda de dados, perda de oportunidade comercial, ou por quaisquer danos diretos ou indiretos decorrentes do uso, mau uso ou indisponibilidade do Kanban. Quando a lei aplicável obrigar o Flexweg a assumir alguma responsabilidade, esta limita-se ao montante efetivamente pago ao Flexweg pelo Kanban nos últimos 12 meses — ou seja, zero, uma vez que o Kanban é gratuito."
+      },
+      "section6": {
+        "title": "6. Os teus dados permanecem teus",
+        "body": "Os conteúdos que crias com o Flexweg Kanban são guardados no teu próprio projeto Firebase (tickets, sprints, comentários, registos de utilizadores, configuração do workflow) e no teu próprio alojamento Flexweg (anexos de tickets carregados via a API de Files). O Flexweg Kanban em si não transmite os teus conteúdos a nenhum serviço de terceiros."
+      },
+      "section7": {
+        "title": "7. Bom uso",
+        "body": "A utilização do Kanban para atividades ilegais, fraudulentas ou nocivas, ou de forma contrária às condições gerais de utilização do Flexweg, pode levar à suspensão do acesso ao alojamento Flexweg. Podemos também atualizar estas condições do Kanban ao longo do tempo; as alterações significativas serão comunicadas através do admin ou por email."
+      },
+      "accept": "Li e aceito as Condições de utilização.",
+      "continue": "Continuar para a configuração",
+      "back": "Voltar"
     },
     "welcome": {
       "heading": "Bem-vindo ao seu Kanban",

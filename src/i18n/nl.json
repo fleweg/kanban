@@ -31,7 +31,43 @@
     "stepper": {
       "welcome": "Welkom",
       "firebase": "Firebase",
-      "flexweg": "Flexweg"
+      "flexweg": "Flexweg",
+      "terms": "Voorwaarden"
+    },
+    "terms": {
+      "title": "Gebruiksvoorwaarden",
+      "intro": "Lees en accepteer de onderstaande voorwaarden voordat je Flexweg Kanban gebruikt. Ze zijn in eenvoudige taal geschreven zodat ze snel te lezen zijn.",
+      "section1": {
+        "title": "1. Gratis dienst",
+        "body": "Flexweg Kanban wordt door Flexweg gratis aangeboden. Je kunt het zonder beperking gebruiken met je Flexweg-hosting — Flexweg zal je het gebruik van het Kanban zelf nooit in rekening brengen. De gebruikelijke kosten van je Flexweg-hostingplan en je Firebase-plan blijven van toepassing op de respectieve accounts."
+      },
+      "section2": {
+        "title": "2. Geleverd „as-is“, zonder garantie",
+        "body": "Het Kanban wordt as-is geleverd. We werken eraan om het stabiel te houden en in de loop van de tijd te verbeteren, maar we kunnen niet garanderen dat het vrij is van bugs, defecten of onderbrekingen. Gebruik het met dezelfde voorzichtigheid als bij elke tool die je niet zelf hebt geschreven: bewaar back-ups van belangrijke content."
+      },
+      "section3": {
+        "title": "3. Jouw content, jouw verantwoordelijkheid",
+        "body": "Jij bent als enige verantwoordelijk voor de content die je via het Kanban publiceert — tekst, afbeeldingen, video's, formulieren, code-embeds en alle andere media. Je moet de toepasselijke wetgeving in jouw rechtsgebied (en in de rechtsgebieden waarop je je richt) naleven, evenals auteursrechten, beeld- en persoonlijkheidsrechten, regels voor de bescherming van persoonsgegevens en de voorwaarden van eventuele derde-diensten die je gebruikt (ingebedde fonts, video's, enz.). Flexweg is niet verantwoordelijk voor content die door gebruikers van het Kanban wordt gepubliceerd."
+      },
+      "section4": {
+        "title": "4. Jouw Firebase-account, jouw beveiliging",
+        "body": "Het Kanban slaat zijn data op in jouw eigen Firebase-project. Jij bent verantwoordelijk voor de beveiliging van dat project: kies een sterk wachtwoord voor het bootstrap-beheerderaccount, stel de Firestore-beveiligingsregels in zoals gedocumenteerd, rouleer je API-sleutels wanneer nodig en controleer wie toegang heeft. Flexweg kan in geen geval verantwoordelijk worden gehouden voor ongeautoriseerde toegang, datalekken, hacks of verlies als gevolg van verkeerde configuratie of compromittering van jouw Firebase-account."
+      },
+      "section5": {
+        "title": "5. Beperking van aansprakelijkheid",
+        "body": "Flexweg kan niet aansprakelijk worden gesteld voor enige inkomstenderving, dataverlies, gemiste zakelijke kansen of enige directe of indirecte schade voortvloeiend uit het gebruik, misbruik of de onbeschikbaarheid van het Kanban. Wanneer de toepasselijke wet Flexweg verplicht enige aansprakelijkheid op zich te nemen, is deze beperkt tot het bedrag dat in de afgelopen 12 maanden daadwerkelijk aan Flexweg voor het Kanban is betaald — dat is nul, aangezien het Kanban gratis is."
+      },
+      "section6": {
+        "title": "6. Je data blijft van jou",
+        "body": "Content die je met Flexweg Kanban aanmaakt wordt opgeslagen in je eigen Firebase-project (tickets, sprints, opmerkingen, gebruikersrecords, workflowconfiguratie) en op je eigen Flexweg-hosting (ticketbijlagen geüpload via de Files API). Flexweg Kanban zelf stuurt je content niet door naar een dienst van derden."
+      },
+      "section7": {
+        "title": "7. Eerlijk gebruik",
+        "body": "Gebruik van het Kanban voor onwettige, frauduleuze of schadelijke activiteiten, of op een manier die in strijd is met de algemene voorwaarden van Flexweg, kan leiden tot opschorting van je toegang tot Flexweg-hosting. We kunnen deze Kanban-voorwaarden in de loop van de tijd ook bijwerken; significante wijzigingen worden gecommuniceerd via de admin of per e-mail."
+      },
+      "accept": "Ik heb de Gebruiksvoorwaarden gelezen en ga ermee akkoord.",
+      "continue": "Door naar configuratie",
+      "back": "Terug"
     },
     "welcome": {
       "heading": "Welkom bij uw Kanban",
