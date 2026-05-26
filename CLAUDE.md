@@ -4,7 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Static React + Vite SPA written in **TypeScript** (`strict` mode), backed by Firebase Firestore (data) and Firebase Auth (email/password gate). Ticket attachments are uploaded to the Flexweg site via its Files API — **not** Firebase Storage (which requires the paid Blaze plan). No Cloud Functions. Implements a backlog, single-active-sprint workflow, and a configurable Kanban board.
+Static React + Vite SPA written in **TypeScript** (`strict` mode). Two interchangeable data backends, chosen at install time and switchable from Settings:
+
+- **Firebase mode** — Firestore for data, Firebase Auth for the login gate. Real-time via `onSnapshot`. Attachments via the Flexweg Files API.
+- **Flexweg SQLite mode** — Flexweg's `/api/v1/sqlite/*` endpoints back a per-site SQLite file. Real auth via the [SQLite Auth API](https://documentation.flexweg.com/api-reference/sqlite-auth) (email/password, bcrypt server-side, opaque 30-day session tokens). Real-time via polling the `/version` endpoint (~4 s). Attachments via the Flexweg Files API (same path as Firebase mode) — the master API key is persisted during install in the SQLite `config` table.
+
+No Cloud Functions, no Firebase Storage. Implements a backlog, single-active-sprint workflow, and a configurable Kanban board.
 
 The built `dist/` directory is **committed to the repo** and is the deploy artifact — hosting only requires serving static files (no npm/Node on the server, no SPA fallback config). [vite.config.ts](vite.config.ts) sets `base: "./"` so all asset paths are relative; the SPA uses `HashRouter` so routes live in the URL fragment (`#/sprint`, `#/backlog`, …) and any host that simply serves `index.html` works — including subpaths and `file://`. After any source change you must `npm run build` and commit the regenerated `dist/`.
 
@@ -30,19 +35,22 @@ The app reads its Firebase config + admin email through one resolver that conver
 
 [src/lib/runtimeConfig.ts](src/lib/runtimeConfig.ts) exposes `getRuntimeConfig()` which checks (1), then (2), and caches the result. [src/services/firebase.ts](src/services/firebase.ts) reads exclusively through this resolver — no direct `import.meta.env` access remains. [src/App.tsx](src/App.tsx) short-circuits to `<SetupForm />` (skipping `<AuthProvider>` etc.) when the resolver returns `null`.
 
-The SetupForm flow ([src/pages/SetupForm.tsx](src/pages/SetupForm.tsx)) is a three-step wizard:
+The SetupForm flow ([src/pages/SetupForm.tsx](src/pages/SetupForm.tsx)) is a multi-step wizard with a branching path depending on the chosen backend:
 
-1. **Welcome** — primes the user on the Firebase + Flexweg prerequisites and links to the official Firebase setup guide.
-2. **Firebase** — collects the 6 web-app config fields + bootstrap admin email + password, then:
-   1. `initFirebaseFromSetup` populates `window.__FLEXWEG_CONFIG__` + initialises the SDK with the form's values (so subsequent Firestore writes see the same instance).
-   2. `signInWithEmailAndPassword` validates the credentials against Firebase Auth.
-   3. Email match: confirms `auth.currentUser.email === form.adminEmail` (catches typos).
-   4. Transitions to the Flexweg sub-step; no Firestore or Flexweg write yet, so users can bail without leaving stale state.
-3. **Flexweg** — collects Flexweg API key + site URL + API base URL, then:
-   1. `testFlexwegConnection` pings `/files/storage-limits` to verify the key.
-   2. Writes `config/flexweg` to Firestore so the attachments service works out of the box — the admin doesn't have to revisit Settings to wire up uploads.
-   3. `uploadConfigJs` writes a serialised `window.__FLEXWEG_CONFIG__ = {…}` to `<folder>/config.js` on Flexweg. The folder is auto-detected from `window.location.pathname` via [src/lib/adminBase.ts](src/lib/adminBase.ts), so the kanban can live at any path on the Flexweg site (`/kanban/`, `/tickets/`, `/erf34f654GH3/`, or even the site root).
-   4. Reloads with a cache-buster (`?_setup=<timestamp>`) — next boot fetches the freshly-uploaded `config.js`, the resolver picks the values up via `readFromGlobal()`, and the app boots into the normal authenticated path.
+1. **Welcome** — primes the user on the prerequisites.
+2. **Terms** — acceptance of the 7-section terms wall.
+3. **Backend** — the user picks **Firebase** or **Flexweg SQLite**. The subsequent steps differ based on this choice. Stepper labels adapt to show the right path.
+4a. **Firebase path** — runs the two-step Firebase + Flexweg flow:
+    - **Firebase** — collects the 6 web-app config fields + bootstrap admin email + password. Initialises Firebase, signs the admin in, verifies email match.
+    - **Flexweg** — collects Flexweg API key + site URL + API base URL. Tests the key, writes `config/flexweg` to Firestore (for the attachments service), uploads `config.js` to Flexweg.
+4b. **SQLite path** — single step `handleSqliteInstall`:
+    1. `POST /api/v1/sqlite/auth/install` — exchanges the master Flexweg API key for a **scoped Sqlite token** bound to the chosen path. The master key is never persisted after this call.
+    2. Applies the `SqliteRuntimeConfig` to `window.__FLEXWEG_CONFIG__` immediately so the next API call routes correctly.
+    3. Runs `ensureSchema()` from [src/services/flexweg-sqlite/schema.ts](src/services/flexweg-sqlite/schema.ts) — idempotent `CREATE TABLE IF NOT EXISTS` + seed default workflow.
+    4. Uploads `config.js` to Flexweg (last use of the master key — discarded after).
+    5. Reloads — next boot, the scoped token is the only credential in `config.js`.
+
+Both paths use `uploadConfigJs` to write `<folder>/config.js`. The folder is auto-detected from `window.location.pathname` via [src/lib/adminBase.ts](src/lib/adminBase.ts), so the kanban can live at any path on the Flexweg site.
 
 The setup helpers in [src/lib/setupApi.ts](src/lib/setupApi.ts) are intentionally separate from [src/services/attachments.ts](src/services/attachments.ts) / [src/services/flexwegConfig.ts](src/services/flexwegConfig.ts): those modules resolve the Flexweg API key from Firestore (`config/flexweg`), which doesn't yet exist during first-run setup. The setup helpers accept the credentials as explicit arguments and call `fetch` directly. After setup completes and the admin reloads, every Flexweg call goes through the regular modules again — `setupApi.ts` is dormant for the lifetime of the deployment.
 
@@ -75,6 +83,50 @@ UI strings in user-facing components go through `t()`. The SetupForm is fully tr
 Persistence is browser-scoped (no `users/{uid}.preferences.adminLocale` field today, unlike the CMS sibling — kanban's user record stays `{ email, role, disabled, createdAt, createdBy }`). If team-wide locale becomes a requirement, add the field on the user record + a Firestore-rules clause and mirror the CMS's `setUserPreferences` flow.
 
 ## Architecture
+
+### Backend dispatch (the most important non-obvious part)
+
+`src/services/` is split into three layers:
+
+```
+src/services/
+├── firebaseClient.ts        Firebase SDK init (cached app/db/auth)
+├── flexwegConfig.ts         Firestore-stored Flexweg API key (Firebase-mode only)
+├── firebase/
+│   ├── tickets.ts           Firestore-backed services
+│   ├── sprints.ts
+│   ├── ...
+├── flexweg-sqlite/
+│   ├── client.ts            HTTP wrapper around /api/v1/sqlite/*
+│   ├── schema.ts            CREATE TABLE statements + workflow seed
+│   ├── subscriptions.ts     polling helper using /version
+│   ├── auth.ts              localStorage identity shim
+│   ├── tickets.ts           SQLite-backed services (same shape as firebase/*)
+│   ├── sprints.ts
+│   └── ...
+├── tickets.ts               DISPATCHER: re-exports from firebase/ OR flexweg-sqlite/
+├── sprints.ts               DISPATCHER
+├── ...
+```
+
+The top-level files (`services/tickets.ts`, `services/sprints.ts`, …) are thin dispatchers that read `getBackendKind()` **at module load time** and re-export from the matching implementation. The choice is fixed for the lifetime of the page — switching backend requires a reload (handled by the Settings backend switcher).
+
+Hooks and components import from the top-level dispatchers and stay oblivious to which backend is active. Adding a new backend = create a sibling subfolder under `src/services/<backend>/` exposing the same function signatures, then add a branch in each dispatcher.
+
+**Why not a runtime hook (`useBackend()`)?** Two reasons: (1) the backend never changes after boot, so module-load dispatch is simpler and faster; (2) Firestore listeners (Firebase) and the polling loop (SQLite) have different setup costs — picking once at module load avoids both code paths being instantiated.
+
+### SQLite-specific architecture
+
+When `backend === "flexweg-sqlite"`:
+
+- **HTTP wrapper** ([src/services/flexweg-sqlite/client.ts](src/services/flexweg-sqlite/client.ts)) exposes `sqlQuery`, `sqlExec`, `sqlBatch`, `sqlVersion`, plus the `callSqlite` low-level helper used by `userAuth.ts`. Every request sends `X-Sqlite-Token` (read from the runtime config). When a user session exists, `X-Sqlite-User-Token` is also sent (read from `localStorage` via `readUserToken()`). A global `onUnauthorized` hook fires on any non-login 401 — `auth.ts` uses it to wipe the cached session and force the login screen.
+- **User auth** ([src/services/flexweg-sqlite/userAuth.ts](src/services/flexweg-sqlite/userAuth.ts)) — thin wrappers around the SQLite Auth API: `registerUser`, `loginUser` (persists `userToken` to `localStorage`), `logoutUser`, `fetchCurrentUser` (`GET /auth/me`), `changePassword`, and admin mutators (`listUsers`, `updateUser`, `adminResetPassword`, `deleteUser`). Errors come back as `SqliteApiError` with the HTTP status, which `describeAuthError()` maps to user-friendly messages.
+- **Session glue** ([src/services/flexweg-sqlite/auth.ts](src/services/flexweg-sqlite/auth.ts)) — emulates Firebase Auth's `subscribeToAuth` API for the rest of the codebase. On first subscribe, calls `/auth/me` to restore the session; emits to all subscribers when the cached user changes (login, logout, 401-triggered reset). `signIn`/`signOut` go through `userAuth.ts`. Identity is exposed as a `FirebaseUser`-shaped cast (only `uid`, `email`, `displayName` are read by consumers).
+- **Polling subscriptions** ([src/services/flexweg-sqlite/subscriptions.ts](src/services/flexweg-sqlite/subscriptions.ts)) — single shared poller hitting `/version` every 4 s. When the version bumps, every active `subscribeWithPolling` callback re-runs its fetch. Stops automatically when no subscribers remain.
+- **Schema** ([src/services/flexweg-sqlite/schema.ts](src/services/flexweg-sqlite/schema.ts)) — `CREATE TABLE IF NOT EXISTS` for `users`, `sprints`, `tickets`, `comments`, `config`. Indexes on `sprint_id`, `epic_id`, `status`, `created_at`. JSON columns for `tickets.checklist` and `tickets.attachments`. `ensureSchema()` is idempotent and called from the install flow AFTER the admin has registered + logged in (so it can authenticate against `/batch`).
+- **First user = admin** — the server-side rule lives in `SqliteAuthService::registerUser` on static-host. The Kanban no longer carries client-side admin-promotion logic. The local SQLite `users` table is now a **cache** populated by `ensureSelfUserRecord` (called from `AuthContext` on each login) so the UI (assignee picker, avatars) can show team members to non-admins, since `/auth/users` is admin-only.
+- **Users cache + auth API** ([src/services/flexweg-sqlite/users.ts](src/services/flexweg-sqlite/users.ts)) — admin mutators (`setUserRole`, `setUserDisabled`, `deleteUserRecord`) call the auth API first (source of truth), then mirror the change in the local SQLite cache. Non-admins read the cache for the assignee picker / avatars.
+- **Attachments** — [src/services/flexweg-sqlite/attachments.ts](src/services/flexweg-sqlite/attachments.ts) is a real implementation that mirrors the Firebase impl: uploads to `/api/v1/files/upload` via the master Flexweg API key (read from the SQLite `config` table by [src/services/flexweg-sqlite/flexwegConfig.ts](src/services/flexweg-sqlite/flexwegConfig.ts)), persists metadata in the `tickets.attachments` JSON column. Same threat model as Firebase mode: the key is readable from devtools by any authenticated user — documented compromise for internal-tool use. The install flow persists the key automatically (last use of the master key before discarding it), so attachments work out of the box.
 
 ### Domain types
 

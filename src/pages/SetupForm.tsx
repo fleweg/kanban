@@ -2,8 +2,11 @@ import { useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   ArrowRight,
-  BookOpen,
   CheckCircle2,
+  ChevronDown,
+  Cloud,
+  Database,
+  Flame,
   LayoutGrid,
   Loader2,
 } from "lucide-react";
@@ -12,8 +15,11 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, setDoc } from "firebase/firestore";
 import {
   buildConfigJsSource,
+  resetRuntimeConfigCache,
   type FlexwegRuntimeConfig,
+  type SqliteRuntimeConfig,
 } from "../lib/runtimeConfig";
+import { getAppFolder } from "../lib/adminBase";
 import {
   SetupApiError,
   testFlexwegConnection,
@@ -26,8 +32,12 @@ import {
   getAuthClient,
   getDb,
   initFirebaseFromSetup,
-} from "../services/firebase";
+} from "../services/firebaseClient";
 import { DEFAULT_FLEXWEG_API_BASE_URL } from "../services/flexwegConfig";
+import { installSqliteApp, SqliteApiError } from "../services/flexweg-sqlite/client";
+import { ensureSchema } from "../services/flexweg-sqlite/schema";
+import { setFlexwegConfig as setSqliteFlexwegConfig } from "../services/flexweg-sqlite/flexwegConfig";
+import { loginUser, registerUser } from "../services/flexweg-sqlite/userAuth";
 import { LocaleSwitcher } from "../components/ui/LocaleSwitcher";
 
 interface FormState {
@@ -42,12 +52,18 @@ interface FormState {
   flexwegApiKey: string;
   flexwegSiteUrl: string;
   flexwegApiBaseUrl: string;
+  // SQLite-only: relative path of the database file inside the user's
+  // Flexweg site (e.g. "kanban/db.sqlite"). Auto-suggested from the
+  // app's current folder so a kanban deployed at /kanban/ defaults
+  // to "kanban/db.sqlite".
+  sqlitePath: string;
 }
 
-// Pre-fills the Flexweg site URL with the page's current origin —
-// the Kanban is typically deployed at `<site>/kanban/`, so the page
-// hosting this form lives under the very URL the user wants to type.
-// Skipped on localhost where the origin is never a useful default.
+// Pre-fills the Flexweg site URL with the page's current origin AND
+// the detected app folder — the Kanban is typically deployed at
+// `<site>/<folder>/`, so the URL the user wants is the full path they
+// loaded the setup form from. Skipped on localhost where the origin is
+// never a useful default.
 function defaultSiteUrl(): string {
   if (typeof window === "undefined") return "";
   const h = window.location.hostname;
@@ -61,7 +77,45 @@ function defaultSiteUrl(): string {
   ) {
     return "";
   }
-  return window.location.origin;
+  const folder = getAppFolder();
+  return folder ? `${window.location.origin}/${folder}` : window.location.origin;
+}
+
+// Suggests an initial value for the SQLite path. Uses the detected
+// app folder (`kanban/`, `tickets/`, `clients/acme/kanban/`, …) and
+// appends `db.sqlite`. Falls back to `kanban/db.sqlite` when the
+// folder cannot be detected (root deployment / SSR).
+function defaultSqlitePath(): string {
+  if (typeof window === "undefined") return "kanban/db.sqlite";
+  const folder = getAppFolder();
+  return folder ? `${folder}/db.sqlite` : "kanban/db.sqlite";
+}
+
+// Reads `?apikey=...` from the page URL so deployments triggered from
+// the Flexweg dashboard can pre-fill the key and skip the copy/paste
+// step. The query string is wiped by the post-install reload (see
+// `reloadAfterSetup`) so the sensitive value never sticks around in
+// browser history / bookmarks / referer headers.
+function defaultFlexwegApiKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const v = new URL(window.location.href).searchParams.get("apikey");
+    return v?.trim() ?? "";
+  } catch {
+    return "";
+  }
+}
+
+// Reloads after a successful setup. Strips ALL query params (including
+// the sensitive `?apikey=...` that the user may have arrived with) so
+// nothing leaks into history / bookmarks / referer. No cache-bust
+// needed: Flexweg's Cloudflare layer auto-invalidates files on
+// modification, and the install flow has just rewritten config.js.
+function reloadAfterSetup(): void {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.search = "";
+  window.location.replace(url.toString());
 }
 
 const INITIAL_STATE: FormState = {
@@ -73,9 +127,10 @@ const INITIAL_STATE: FormState = {
   appId: "",
   adminEmail: "",
   adminPassword: "",
-  flexwegApiKey: "",
+  flexwegApiKey: defaultFlexwegApiKey(),
   flexwegSiteUrl: defaultSiteUrl(),
   flexwegApiBaseUrl: DEFAULT_FLEXWEG_API_BASE_URL,
+  sqlitePath: defaultSqlitePath(),
 };
 
 type ErrorKind =
@@ -122,15 +177,21 @@ function authErrorTranslationKey(err: unknown): string {
   }
 }
 
-type WizardStep = "welcome" | "terms" | "firebase" | "flexweg";
+type WizardStep = "terms" | "backend" | "firebase" | "flexweg" | "sqlite";
+
+type BackendChoice = "firebase" | "flexweg-sqlite" | null;
 
 export function SetupForm() {
   const { t } = useTranslation();
-  // Three-step wizard: welcome landing, then Firebase config (sign-in
-  // + email match), then Flexweg config (API test + Firestore write +
-  // config.js upload). Welcome step primes the user on the Firebase
-  // prerequisite before throwing eleven form fields at them.
-  const [wizardStep, setWizardStep] = useState<WizardStep>("welcome");
+  // Multi-step wizard. Welcome and terms are common; after Terms the
+  // user picks the data backend (Firebase vs Flexweg SQLite) and the
+  // subsequent steps differ. Firebase needs sign-in + the existing
+  // Flexweg attachments config; SQLite needs a single Flexweg-key
+  // step that swaps for a scoped Sqlite token.
+  const [wizardStep, setWizardStep] = useState<WizardStep>("terms");
+  // Default to Flexweg SQLite — fastest path, no external service.
+  // The user can still switch to Firebase on the backend choice step.
+  const [backendChoice, setBackendChoice] = useState<BackendChoice>("flexweg-sqlite");
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState<string | null>(null);
@@ -159,6 +220,7 @@ export function SetupForm() {
       flexwegApiBaseUrl:
         form.flexwegApiBaseUrl.trim().replace(/\/+$/, "") ||
         DEFAULT_FLEXWEG_API_BASE_URL,
+      sqlitePath: form.sqlitePath.trim().replace(/^\/+|\/+$/g, ""),
     };
   }
 
@@ -177,6 +239,28 @@ export function SetupForm() {
     }
     if (!form.adminPassword) return false;
     if (!/.+@.+\..+/.test(state.adminEmail)) return false;
+    return true;
+  }
+
+  function validateSqlite(state: FormState): boolean {
+    const required: Array<keyof FormState> = [
+      "flexwegApiKey",
+      "flexwegSiteUrl",
+      "flexwegApiBaseUrl",
+      "sqlitePath",
+      // The first admin user is created during install — we need
+      // their email + password to seed the auth API.
+      "adminEmail",
+    ];
+    for (const k of required) {
+      if (!state[k]) return false;
+    }
+    if (!/.+@.+\..+/.test(state.adminEmail)) return false;
+    if (!form.adminPassword || form.adminPassword.length < 8) return false;
+    // SQLite path must end with .sqlite (or .db) and contain only
+    // safe characters. Server enforces this too, but a client check
+    // gives a friendlier error.
+    if (!/^[\w./-]+\.(sqlite|db)$/i.test(state.sqlitePath)) return false;
     return true;
   }
 
@@ -213,6 +297,7 @@ export function SetupForm() {
     }
 
     const runtimeConfig: FlexwegRuntimeConfig = {
+      backend: "firebase",
       firebase: {
         apiKey: state.apiKey,
         authDomain: state.authDomain,
@@ -304,6 +389,7 @@ export function SetupForm() {
     }
 
     const runtimeConfig: FlexwegRuntimeConfig = {
+      backend: "firebase",
       firebase: {
         apiKey: state.apiKey,
         authDomain: state.authDomain,
@@ -395,11 +481,187 @@ export function SetupForm() {
 
       setDone(true);
       setStep(null);
-      window.setTimeout(() => {
-        const next = new URL(window.location.href);
-        next.searchParams.set("_setup", String(Date.now()));
-        window.location.replace(next.toString());
-      }, 2000);
+      window.setTimeout(reloadAfterSetup, 2000);
+    } catch (err) {
+      setError({ kind: "generic", detail: (err as Error).message });
+      setSubmitting(false);
+      setStep(null);
+    }
+  }
+
+  // SQLite-mode install. Single-step replacement for the
+  // Firebase+Flexweg combo:
+  //   1. POST /api/v1/sqlite/auth/install with the master Flexweg API
+  //      key (exchanged for a scoped Sqlite token, then discarded).
+  //   2. Apply the SqliteRuntimeConfig locally so subsequent API calls
+  //      route through the new backend without a reload.
+  //   3. Run schema bootstrap (CREATE TABLEs + seed workflow).
+  //   4. Upload config.js to Flexweg using the master key.
+  //   5. Reload — every future boot reads config.js, picks the SQLite
+  //      backend, and uses the scoped token.
+  async function handleSqliteInstall(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    setProgressLog([]);
+
+    const state = trimmed();
+    if (!validateSqlite(state)) {
+      setError({ kind: "missingFields" });
+      setSubmitting(false);
+      return;
+    }
+
+    const logDone = (label: string) =>
+      setProgressLog((prev) => [...prev, label]);
+    try {
+      // 1. Exchange master API key for scoped SQLite token (with
+      //    requireUserAuth=true so every CRUD request must also carry
+      //    a user session token).
+      setStep(t("setup.steps.sqliteInstall"));
+      let token: string;
+      try {
+        const installed = await installSqliteApp({
+          masterApiKey: state.flexwegApiKey,
+          apiBaseUrl: state.flexwegApiBaseUrl,
+          path: state.sqlitePath,
+          name: "Kanban app",
+          requireUserAuth: true,
+          allowedOrigins: typeof window !== "undefined" ? [window.location.origin] : undefined,
+        });
+        token = installed.token;
+      } catch (err) {
+        if (err instanceof SqliteApiError) {
+          if (err.status === 401 || err.status === 403) {
+            setError({ kind: "flexwegAuth" });
+          } else {
+            setError({
+              kind: "generic",
+              detail: t("setup.errors.flexwegHttp", {
+                status: err.status,
+                detail: err.message,
+              }),
+            });
+          }
+        } else {
+          setError({ kind: "flexwegNetwork" });
+        }
+        setSubmitting(false);
+        setStep(null);
+        return;
+      }
+      logDone(t("setup.stepsDone.sqliteInstall"));
+
+      // 2. Inject the SqliteRuntimeConfig before any SQL call so the
+      //    client (sqlBatch / sqlQuery / register / login) resolves
+      //    the right backend.
+      const runtimeConfig: SqliteRuntimeConfig = {
+        backend: "flexweg-sqlite",
+        flexweg: {
+          siteUrl: state.flexwegSiteUrl,
+          apiBaseUrl: state.flexwegApiBaseUrl,
+          sqliteToken: token,
+          sqlitePath: state.sqlitePath,
+        },
+      };
+      if (typeof window !== "undefined") {
+        window.__FLEXWEG_CONFIG__ = runtimeConfig;
+      }
+      resetRuntimeConfigCache();
+
+      // 3. Register the admin + log them in. The server's "first
+      //    user = admin" rule applies — the very first registration
+      //    on this brand-new DB gets role=admin automatically.
+      //    Login persists the user token in localStorage via
+      //    loginUser(), which is required by subsequent CRUD calls
+      //    since the scoped token has requireUserAuth=true.
+      setStep(t("setup.steps.sqliteRegisterAdmin"));
+      try {
+        // Pass the master API key explicitly — the server now requires
+        // admin authorization on /auth/register so the public scoped
+        // token alone can't seed accounts (see SqliteAuthApiController).
+        // We still hold the key in this step's local state; it's
+        // discarded right after the schema bootstrap finishes below.
+        await registerUser({
+          email: state.adminEmail,
+          password: form.adminPassword,
+          displayName: state.adminEmail.split("@")[0],
+          masterApiKey: state.flexwegApiKey,
+        });
+        await loginUser({
+          email: state.adminEmail,
+          password: form.adminPassword,
+        });
+      } catch (err) {
+        setError({
+          kind: "generic",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+        setSubmitting(false);
+        setStep(null);
+        return;
+      }
+      logDone(t("setup.stepsDone.sqliteRegisterAdmin"));
+
+      // 4. Bootstrap the schema. Idempotent — safe to run on a brand
+      //    new DB or an existing one. Login above means the sqlBatch
+      //    inside ensureSchema() can authenticate.
+      setStep(t("setup.steps.sqliteSchema"));
+      try {
+        await ensureSchema();
+      } catch (err) {
+        setError({ kind: "generic", detail: (err as Error).message });
+        setSubmitting(false);
+        setStep(null);
+        return;
+      }
+      logDone(t("setup.stepsDone.sqliteSchema"));
+
+      // 4b. Persist the Flexweg API key in the SQLite `config` table
+      //     so the attachments service can use it post-install. Same
+      //     security profile as Firebase mode (all-active-users-read,
+      //     admin-write enforced by the Auth API).
+      try {
+        await setSqliteFlexwegConfig({
+          apiKey: state.flexwegApiKey,
+          siteUrl: state.flexwegSiteUrl,
+          apiBaseUrl: state.flexwegApiBaseUrl,
+        });
+      } catch (err) {
+        // Non-fatal: install still succeeded, attachments just won't
+        // work until the admin re-enters the key from Settings.
+        console.warn("Failed to persist Flexweg API key — attachments will be unavailable until set from Settings", err);
+      }
+
+      // 4. Upload config.js to Flexweg with the master key — same
+      //    helper used by the Firebase flow. Master key is discarded
+      //    after this call; it is never persisted in config.js.
+      setStep(t("setup.steps.uploadConfig"));
+      const flexwegSetup: SetupFlexwegConfig = {
+        apiKey: state.flexwegApiKey,
+        siteUrl: state.flexwegSiteUrl,
+        apiBaseUrl: state.flexwegApiBaseUrl,
+      };
+      try {
+        const source = buildConfigJsSource(runtimeConfig);
+        await uploadConfigJs(flexwegSetup, source);
+      } catch (err) {
+        setError({
+          kind: "uploadFailed",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+        setSubmitting(false);
+        setStep(null);
+        return;
+      }
+      logDone(t("setup.stepsDone.uploadConfig"));
+
+      // 5. Reload — next boot will read the new config.js and route
+      //    everything to the SQLite backend.
+      setDone(true);
+      setStep(null);
+      window.setTimeout(reloadAfterSetup, 2000);
     } catch (err) {
       setError({ kind: "generic", detail: (err as Error).message });
       setSubmitting(false);
@@ -441,14 +703,37 @@ export function SetupForm() {
           </div>
         </div>
 
-        <Stepper currentStep={wizardStep} />
+        <Stepper currentStep={wizardStep} backendChoice={backendChoice} />
 
-        {wizardStep === "welcome" ? (
-          <WelcomeStep onContinue={() => setWizardStep("terms")} />
-        ) : wizardStep === "terms" ? (
-          <TermsStep
-            onAccept={() => setWizardStep("firebase")}
-            onBack={() => setWizardStep("welcome")}
+        {wizardStep === "terms" ? (
+          <TermsStep onAccept={() => setWizardStep("backend")} />
+        ) : wizardStep === "backend" ? (
+          <BackendChoiceStep
+            value={backendChoice}
+            onChange={setBackendChoice}
+            onContinue={() => {
+              setError(null);
+              if (backendChoice === "flexweg-sqlite") {
+                setWizardStep("sqlite");
+              } else {
+                setBackendChoice("firebase");
+                setWizardStep("firebase");
+              }
+            }}
+            onBack={() => setWizardStep("terms")}
+          />
+        ) : wizardStep === "sqlite" ? (
+          <SqliteInstallStep
+            form={form}
+            patch={patch}
+            onSubmit={handleSqliteInstall}
+            onBack={() => {
+              setError(null);
+              setWizardStep("backend");
+            }}
+            submitting={submitting}
+            done={done}
+            error={error}
           />
         ) : wizardStep === "firebase" ? (
           <div className="card p-6">
@@ -548,7 +833,7 @@ export function SetupForm() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
-                  onClick={() => setWizardStep("terms")}
+                  onClick={() => setWizardStep("backend")}
                   className="btn-secondary flex-1 justify-center"
                   disabled={submitting || done}
                 >
@@ -660,16 +945,31 @@ export function SetupForm() {
 
 interface StepperProps {
   currentStep: WizardStep;
+  backendChoice: BackendChoice;
 }
 
-function Stepper({ currentStep }: StepperProps) {
+function Stepper({ currentStep, backendChoice }: StepperProps) {
   const { t } = useTranslation();
-  const steps: Array<{ id: WizardStep; label: string }> = [
-    { id: "welcome", label: t("setup.stepper.welcome") },
+  // The path after "backend" depends on the chosen backend. Until the
+  // user picks, we show only the common prefix.
+  const base: Array<{ id: WizardStep; label: string }> = [
     { id: "terms", label: t("setup.stepper.terms") },
-    { id: "firebase", label: t("setup.stepper.firebase") },
-    { id: "flexweg", label: t("setup.stepper.flexweg") },
+    { id: "backend", label: t("setup.stepper.backend") },
   ];
+  let steps = base;
+  if (backendChoice === "flexweg-sqlite" || currentStep === "sqlite") {
+    steps = [...base, { id: "sqlite", label: t("setup.stepper.sqlite") }];
+  } else if (
+    backendChoice === "firebase" ||
+    currentStep === "firebase" ||
+    currentStep === "flexweg"
+  ) {
+    steps = [
+      ...base,
+      { id: "firebase", label: t("setup.stepper.firebase") },
+      { id: "flexweg", label: t("setup.stepper.flexweg") },
+    ];
+  }
   const activeIndex = steps.findIndex((s) => s.id === currentStep);
   return (
     <div className="flex items-center justify-center gap-3 mb-6">
@@ -719,56 +1019,8 @@ function Stepper({ currentStep }: StepperProps) {
   );
 }
 
-interface WelcomeStepProps {
-  onContinue: () => void;
-}
-
-function WelcomeStep({ onContinue }: WelcomeStepProps) {
-  const { t } = useTranslation();
-  const tutorialUrl = t("setup.welcome.tutorialUrl");
-  return (
-    <div className="card p-6">
-      <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-50">
-        {t("setup.welcome.heading")}
-      </h2>
-      <p className="text-sm text-surface-600 dark:text-surface-300 mt-3">
-        {t("setup.welcome.intro")}
-      </p>
-      <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800/60 dark:bg-blue-950/40">
-        <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">
-          {t("setup.welcome.firebaseTitle")}
-        </h3>
-        <p className="text-xs text-blue-800/90 dark:text-blue-300/90 mt-1.5 leading-relaxed">
-          {t("setup.welcome.firebaseBody")}
-        </p>
-      </div>
-
-      <div className="mt-6 flex flex-col sm:flex-row gap-3">
-        <a
-          href={tutorialUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-secondary flex-1 justify-center"
-        >
-          <BookOpen className="h-4 w-4" />
-          {t("setup.welcome.tutorialButton")}
-        </a>
-        <button
-          type="button"
-          onClick={onContinue}
-          className="btn-primary flex-1 justify-center"
-        >
-          {t("setup.welcome.haveAccountButton")}
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
 interface TermsStepProps {
   onAccept: () => void;
-  onBack: () => void;
 }
 
 // 7-section terms wall, mirroring the CMS sibling. Each section's title +
@@ -776,7 +1028,7 @@ interface TermsStepProps {
 // a fixed range without changing this component when the text is edited.
 const TERMS_SECTION_COUNT = 7;
 
-function TermsStep({ onAccept, onBack }: TermsStepProps) {
+function TermsStep({ onAccept }: TermsStepProps) {
   const { t } = useTranslation();
   const [accepted, setAccepted] = useState(false);
   return (
@@ -813,19 +1065,12 @@ function TermsStep({ onAccept, onBack }: TermsStepProps) {
         </span>
       </label>
 
-      <div className="mt-6 flex flex-col sm:flex-row gap-3">
-        <button
-          type="button"
-          onClick={onBack}
-          className="btn-secondary flex-1 justify-center"
-        >
-          {t("common.back")}
-        </button>
+      <div className="mt-6 flex justify-end">
         <button
           type="button"
           onClick={onAccept}
           disabled={!accepted}
-          className="btn-primary flex-1 justify-center"
+          className="btn-primary justify-center"
         >
           {t("setup.terms.continue")}
           <ArrowRight className="h-4 w-4" />
@@ -921,6 +1166,288 @@ function ErrorMessage({ error }: { error: ErrorState }) {
     default:
       return <span>{error.detail ?? t("setup.errors.generic")}</span>;
   }
+}
+
+interface BackendChoiceStepProps {
+  value: BackendChoice;
+  onChange: (choice: BackendChoice) => void;
+  onContinue: () => void;
+  onBack: () => void;
+}
+
+// Stacked radio choice — minimalist take ported from the Notion app.
+// Two labels (full-row click target), each with a tiny icon + 1-line
+// hint. No bullets / warnings / external link button — the trade-offs
+// live in the install steps themselves and in the docs.
+function BackendChoiceStep({ value, onChange, onContinue, onBack }: BackendChoiceStepProps) {
+  const { t } = useTranslation();
+  return (
+    <div className="card p-6">
+      <h2 className="text-lg font-semibold text-surface-900 dark:text-surface-50">
+        {t("setup.backend.heading")}
+      </h2>
+      <p className="text-sm text-surface-600 dark:text-surface-300 mt-3">
+        {t("setup.backend.intro")}
+      </p>
+
+      <div className="mt-5 space-y-3">
+        <BackendRadio
+          icon={Database}
+          title={t("setup.backend.sqliteTitle")}
+          hint={t("setup.backend.sqliteHint")}
+          selected={value === "flexweg-sqlite"}
+          onSelect={() => onChange("flexweg-sqlite")}
+        />
+        <BackendRadio
+          icon={Flame}
+          title={t("setup.backend.firebaseTitle")}
+          hint={t("setup.backend.firebaseHint")}
+          selected={value === "firebase"}
+          onSelect={() => onChange("firebase")}
+        />
+      </div>
+
+      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <button type="button" onClick={onBack} className="btn-secondary flex-1 justify-center">
+          {t("common.back")}
+        </button>
+        <button
+          type="button"
+          onClick={onContinue}
+          disabled={value === null}
+          className="btn-primary flex-1 justify-center"
+        >
+          {t("setup.backend.continue")}
+          <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface BackendRadioProps {
+  icon: typeof Flame;
+  title: string;
+  hint: string;
+  selected: boolean;
+  onSelect: () => void;
+}
+
+function BackendRadio({ icon: Icon, title, hint, selected, onSelect }: BackendRadioProps) {
+  return (
+    <label
+      className={
+        "flex items-start gap-3 p-3 rounded-lg ring-1 ring-inset cursor-pointer transition-colors " +
+        (selected
+          ? "ring-blue-500 bg-blue-50/60 dark:ring-blue-400 dark:bg-blue-900/20"
+          : "ring-surface-200 hover:bg-surface-50 dark:ring-surface-700 dark:hover:bg-surface-800/60")
+      }
+    >
+      <input
+        type="radio"
+        name="backend"
+        checked={selected}
+        onChange={onSelect}
+        className="mt-1"
+      />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold flex items-center gap-1.5">
+          <Icon className="h-4 w-4 text-surface-500" />
+          {title}
+        </p>
+        <p className="text-xs text-surface-500 dark:text-surface-400 mt-1 leading-relaxed">
+          {hint}
+        </p>
+      </div>
+    </label>
+  );
+}
+
+interface SqliteInstallStepProps {
+  form: FormState;
+  patch: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+  onSubmit: (e: FormEvent<HTMLFormElement>) => void;
+  onBack: () => void;
+  submitting: boolean;
+  done: boolean;
+  error: ErrorState | null;
+}
+
+function SqliteInstallStep({
+  form,
+  patch,
+  onSubmit,
+  onBack,
+  submitting,
+  done,
+  error,
+}: SqliteInstallStepProps) {
+  const { t } = useTranslation();
+  // Snapshot at mount: was the API key pre-filled from `?apikey=`?
+  // Used to show a "✓ Detected from URL" confirmation chip.
+  const [apiKeyFromUrl] = useState(() => defaultFlexwegApiKey() !== "");
+  // Advanced (Site URL / API base / SQLite path) starts collapsed when
+  // all three are pre-filled — covers the common Flexweg dashboard
+  // install flow. If any is empty (typically Site URL on localhost),
+  // we expand so the user doesn't miss a required field.
+  const [advancedOpen, setAdvancedOpen] = useState(
+    () => !form.flexwegSiteUrl || !form.flexwegApiBaseUrl || !form.sqlitePath,
+  );
+  return (
+    <div className="card p-6">
+      <div className="flex items-center gap-2 mb-3">
+        <Cloud className="h-4 w-4 text-emerald-500" />
+        <h2 className="text-sm font-semibold text-surface-900 dark:text-surface-50">
+          {t("setup.sqlite.heading")}
+        </h2>
+      </div>
+      <p className="text-sm text-surface-600 dark:text-surface-300">
+        {t("setup.sqlite.intro")}
+      </p>
+
+      <form onSubmit={onSubmit} className="mt-6 space-y-6">
+        <fieldset className="space-y-4">
+          <legend className="sr-only">{t("setup.sqlite.heading")}</legend>
+          <div className="grid grid-cols-1 gap-3">
+            <div>
+              <Field
+                label={t("setup.fields.flexwegApiKey")}
+                type="password"
+                value={form.flexwegApiKey}
+                onChange={(v) => patch("flexwegApiKey", v)}
+                required
+                autoFocus={!apiKeyFromUrl}
+              />
+              {apiKeyFromUrl ? (
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  {t("setup.sqlite.detectedFromUrl")}
+                </p>
+              ) : (
+                <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-1">
+                  {t("setup.sqlite.apiKeyHint")}{" "}
+                  <a
+                    href="https://www.flexweg.com/account/settings"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline dark:text-blue-400"
+                  >
+                    {t("setup.help.flexwegApiKeyLink")}
+                  </a>
+                  .
+                </p>
+              )}
+            </div>
+
+            {/* Advanced toggle — collapses Site URL / API base URL /
+                SQLite path when they're all pre-filled and the user
+                doesn't need to touch them. */}
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="self-start inline-flex items-center gap-1 text-xs text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+              aria-expanded={advancedOpen}
+            >
+              <ChevronDown
+                className={
+                  "h-3.5 w-3.5 transition-transform " + (advancedOpen ? "" : "-rotate-90")
+                }
+              />
+              {t("setup.sqlite.advanced")}
+            </button>
+
+            {advancedOpen && (
+              <>
+                <Field
+                  label={t("setup.fields.flexwegSiteUrl")}
+                  placeholder="https://your-site.flexweg.com"
+                  value={form.flexwegSiteUrl}
+                  onChange={(v) => patch("flexwegSiteUrl", v)}
+                  required
+                />
+                <Field
+                  label={t("setup.fields.flexwegApiBaseUrl")}
+                  value={form.flexwegApiBaseUrl}
+                  onChange={(v) => patch("flexwegApiBaseUrl", v)}
+                  required
+                />
+                <div>
+                  <Field
+                    label={t("setup.fields.sqlitePath")}
+                    placeholder="kanban/db.sqlite"
+                    value={form.sqlitePath}
+                    onChange={(v) => patch("sqlitePath", v)}
+                    required
+                  />
+                  <p className="text-[11px] text-surface-500 dark:text-surface-400 mt-1">
+                    {t("setup.sqlite.pathHint")}
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </fieldset>
+
+        <fieldset className="space-y-4 border-t border-surface-200 pt-5 dark:border-surface-700">
+          <legend className="text-sm font-semibold text-surface-900 dark:text-surface-50">
+            {t("setup.sqlite.adminHeading")}
+          </legend>
+          <p className="text-xs text-surface-500 dark:text-surface-400">
+            {t("setup.sqlite.adminIntro")}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field
+              type="email"
+              label={t("setup.fields.adminEmail")}
+              placeholder="you@company.com"
+              value={form.adminEmail}
+              onChange={(v) => patch("adminEmail", v)}
+              required
+              autoComplete="email"
+            />
+            <Field
+              type="password"
+              label={t("setup.fields.adminPassword")}
+              placeholder="••••••••"
+              value={form.adminPassword}
+              onChange={(v) => patch("adminPassword", v)}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+          <p className="text-[11px] text-surface-500 dark:text-surface-400 -mt-1">
+            {t("setup.sqlite.passwordHint")}
+          </p>
+        </fieldset>
+
+        <div aria-live="polite" aria-atomic="true">
+          {error ? (
+            <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
+              <ErrorMessage error={error} />
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="btn-secondary flex-1 justify-center"
+            disabled={submitting || done}
+          >
+            {t("common.back")}
+          </button>
+          <button
+            type="submit"
+            className="btn-primary flex-1 justify-center"
+            disabled={submitting || done}
+          >
+            {t("setup.sqlite.submit")}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 interface ProgressOverlayProps {

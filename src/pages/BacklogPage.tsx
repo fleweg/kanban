@@ -8,6 +8,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { useAppData } from "../context/AppDataContext";
 import { moveTicketToSprint, reorderTicket } from "../services/tickets";
 import { compareTickets, computeNewOrder } from "../lib/utils";
+import { useTicketOptimistic } from "../hooks/useTicketOptimistic";
 import type { Ticket } from "../types";
 
 const DROPPABLE_ID = "backlog";
@@ -17,7 +18,9 @@ export function BacklogPage() {
   const [editing, setEditing] = useState<Ticket | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const orderedTickets = useMemo(() => [...backlogTickets].sort(compareTickets), [backlogTickets]);
+  // Optimistic drag-reorder — see useTicketOptimistic for the rationale.
+  const { effectiveTickets, setOverride, clearOverride } = useTicketOptimistic(backlogTickets);
+  const orderedTickets = useMemo(() => [...effectiveTickets].sort(compareTickets), [effectiveTickets]);
 
   async function moveToSprint(ticket: Ticket) {
     if (!activeSprint) return;
@@ -31,10 +34,12 @@ export function BacklogPage() {
     if (destination.droppableId !== DROPPABLE_ID) return;
     if (destination.index === source.index) return;
     const newOrder = computeNewOrder(orderedTickets, draggableId, destination.index);
+    setOverride(draggableId, { order: newOrder });
     try {
       await reorderTicket(draggableId, { order: newOrder });
     } catch (err) {
       console.error(err);
+      clearOverride(draggableId);
     }
   }
 

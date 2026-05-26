@@ -1,4 +1,4 @@
-// Runtime configuration resolver. Picks Firebase + admin email values
+// Runtime configuration resolver. Picks the data backend + its credentials
 // from one of two sources, in order:
 //
 //   1. window.__FLEXWEG_CONFIG__ — set synchronously by /config.js
@@ -23,17 +23,56 @@ declare global {
   interface Window {
     // Set by /config.js before the main bundle loads. May be null
     // when the app is freshly deployed without baked-in env values.
-    __FLEXWEG_CONFIG__?: FlexwegRuntimeConfig | null;
+    __FLEXWEG_CONFIG__?: FlexwegRuntimeConfig | LegacyFirebaseConfig | null;
   }
 }
 
-export interface FlexwegRuntimeConfig {
+// The backend discriminator. "firebase" keeps the original Firestore +
+// Firebase Auth path. "flexweg-sqlite" routes all data ops to the
+// Flexweg SQLite Files API instead — no Firestore, no Firebase Auth,
+// no external account required besides the Flexweg one the user
+// already has for hosting.
+export type BackendKind = "firebase" | "flexweg-sqlite";
+
+export interface FirebaseRuntimeConfig {
+  backend: "firebase";
   firebase: FirebaseOptions;
   // The bootstrap admin email. This Kanban detects bootstrap-admin
   // status via a plain string match against this value (see
   // services/firebase.ts.getAdminEmail() + context/AuthContext.tsx),
   // so it MUST be present for admin features (Users page, role
   // management) to light up.
+  adminEmail: string;
+}
+
+export interface SqliteRuntimeConfig {
+  backend: "flexweg-sqlite";
+  flexweg: {
+    // Base URL of the Flexweg site that hosts the SQLite file. Used to
+    // build public asset URLs for attachments (same convention as the
+    // Firebase mode's Flexweg attachments config).
+    siteUrl: string;
+    // Base URL of the Flexweg API, e.g. "https://www.flexweg.com/api/v1".
+    apiBaseUrl: string;
+    // Scoped Sqlite token issued by /api/v1/sqlite/auth/install. Limited
+    // to one path + one storage folder + no other Flexweg permissions.
+    // Stored in the browser is acceptable because of the strict scoping
+    // (compared to a master API key which must NEVER be exposed).
+    sqliteToken: string;
+    // The path of the SQLite file inside the user's Flexweg site,
+    // e.g. "kanban/db.sqlite". Used by /api/v1/sqlite/* for sanity
+    // checks (the token is also bound to this path server-side).
+    sqlitePath: string;
+  };
+}
+
+export type FlexwegRuntimeConfig = FirebaseRuntimeConfig | SqliteRuntimeConfig;
+
+// Backward-compat shape: pre-backend-choice config.js files just had
+// { firebase, adminEmail } at the top level. We treat them as
+// FirebaseRuntimeConfig on read.
+interface LegacyFirebaseConfig {
+  firebase: FirebaseOptions;
   adminEmail: string;
 }
 
@@ -64,17 +103,48 @@ function nonEmpty(s: unknown): s is string {
   return typeof s === "string" && s.trim().length > 0;
 }
 
+function looksLikeSqliteShape(raw: unknown): raw is SqliteRuntimeConfig {
+  if (!raw || typeof raw !== "object") return false;
+  const r = raw as Partial<SqliteRuntimeConfig>;
+  if (r.backend !== "flexweg-sqlite") return false;
+  const f = r.flexweg;
+  return (
+    !!f &&
+    typeof f === "object" &&
+    nonEmpty(f.siteUrl) &&
+    nonEmpty(f.apiBaseUrl) &&
+    nonEmpty(f.sqliteToken) &&
+    nonEmpty(f.sqlitePath)
+  );
+}
+
+function looksLikeFirebaseShape(raw: unknown): raw is FirebaseRuntimeConfig {
+  if (!raw || typeof raw !== "object") return false;
+  const r = raw as Partial<FirebaseRuntimeConfig>;
+  // Accept missing `backend` for backward compatibility with config.js
+  // files generated before the backend choice was introduced.
+  if (r.backend !== undefined && r.backend !== "firebase") return false;
+  const fb = r.firebase;
+  if (!fb) return false;
+  for (const field of FIREBASE_FIELDS) {
+    if (!nonEmpty((fb as Record<string, unknown>)[field])) return false;
+  }
+  return nonEmpty(r.adminEmail);
+}
+
 function readFromGlobal(): FlexwegRuntimeConfig | null {
   if (typeof window === "undefined") return null;
   const raw = window.__FLEXWEG_CONFIG__;
   if (!raw || typeof raw !== "object") return null;
-  const fb = (raw as FlexwegRuntimeConfig).firebase;
-  if (!fb) return null;
-  for (const field of FIREBASE_FIELDS) {
-    if (!nonEmpty((fb as Record<string, unknown>)[field])) return null;
+  // Try SQLite first (explicit discriminator); fall back to Firebase
+  // shape detection so legacy configs (no `backend` field) keep working.
+  if (looksLikeSqliteShape(raw)) return raw;
+  if (looksLikeFirebaseShape(raw)) {
+    // Normalize: add `backend: "firebase"` so callers can rely on the
+    // discriminator even when the source omitted it.
+    return { backend: "firebase", firebase: raw.firebase, adminEmail: raw.adminEmail };
   }
-  if (!nonEmpty((raw as FlexwegRuntimeConfig).adminEmail)) return null;
-  return raw as FlexwegRuntimeConfig;
+  return null;
 }
 
 function readFromImportMetaEnv(): FlexwegRuntimeConfig | null {
@@ -88,6 +158,7 @@ function readFromImportMetaEnv(): FlexwegRuntimeConfig | null {
   const adminEmail = env.VITE_ADMIN_EMAIL;
   if (!nonEmpty(adminEmail)) return null;
   return {
+    backend: "firebase",
     firebase: firebase as FirebaseOptions,
     adminEmail,
   };
@@ -109,12 +180,18 @@ export function resetRuntimeConfigCache(): void {
   cached = undefined;
 }
 
+// Convenience: which backend is active?
+export function getBackendKind(): BackendKind | null {
+  return getRuntimeConfig()?.backend ?? null;
+}
+
 // Returns the env var names that would need to be set if we were
 // going the .env route. Useful for the "missing fields" diagnostic
-// on the pre-setup error screen and in the SetupForm.
+// on the pre-setup error screen and in the SetupForm. Only relevant
+// for the Firebase backend — SQLite has no .env fallback.
 export function getMissingFirebaseFields(): string[] {
-  const fb = readFromGlobal()?.firebase ?? null;
-  if (fb) return [];
+  const fromGlobal = readFromGlobal();
+  if (fromGlobal && fromGlobal.backend === "firebase") return [];
   const env = import.meta.env;
   return FIREBASE_FIELDS.filter((f) => !nonEmpty(env[ENV_KEY_BY_FIELD[f]])).map(
     (f) => ENV_KEY_BY_FIELD[f],
@@ -126,13 +203,18 @@ export function getMissingFirebaseFields(): string[] {
 // next reload it executes synchronously before the bundle and the
 // resolver picks the values up via readFromGlobal().
 //
-// adminEmail is INCLUDED in the serialised output — this Kanban
-// detects bootstrap admin via email match against the runtime
-// config (services/firebase.ts.getAdminEmail()), not via a
-// Firestore-rules probe. Without it, the signed-in admin would
-// lose access to the Users page after reload. The email is
-// otherwise non-secret (every Firestore-rule reader can see who
-// created docs anyway).
+// For Firebase mode adminEmail is INCLUDED in the serialised output —
+// this Kanban detects bootstrap admin via email match against the
+// runtime config (services/firebase.ts.getAdminEmail()), not via a
+// Firestore-rules probe. Without it, the signed-in admin would lose
+// access to the Users page after reload. The email is otherwise
+// non-secret (every Firestore-rule reader can see who created docs
+// anyway).
+//
+// For SQLite mode the scoped sqliteToken is included — it's bound to
+// one specific path on one specific storage folder, so its blast
+// radius is limited even though it ends up in a browser-readable file.
+// The MASTER Flexweg API key is never serialized into config.js.
 export function buildConfigJsSource(config: FlexwegRuntimeConfig): string {
   const banner =
     "// Generated by Flexweg Kanban first-run setup. Do not edit by hand —\n" +

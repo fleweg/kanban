@@ -14,7 +14,8 @@ A fully static React + Firebase ticket manager with a backlog, sprint workflow, 
 - **Rich descriptions** — WYSIWYG editor (TipTap) with bold/italic, headings, lists, code blocks, links.
 - **Checklist** — sub-tasks per ticket with live progress badge on cards.
 - **Attachments** — drop images / PDF / text / fonts (up to 10 MB each) into any ticket; stored on your Flexweg site via its [Files API](https://documentation.flexweg.com/api-reference/files/), downloadable from the modal.
-- **Real-time sync** — all data is streamed from Firestore via `onSnapshot`.
+- **Real-time sync** — all data is streamed from Firestore via `onSnapshot` (Firebase mode) or polled every ~4 s via the Flexweg SQLite version endpoint (SQLite mode).
+- **Two backend choices at install** — pick **Firebase** (real-time, attachments) or **Flexweg SQLite** (no external account, real email+password auth via the Flexweg SQLite Auth API, SQL via the Flexweg-hosted database service).
 - **Static build** — deploy the `dist/` folder to any static host. Designed primarily for [Flexweg](https://www.flexweg.com), but works on Netlify, Vercel, GitHub Pages, Firebase Hosting, etc.
 - **First-run setup UI** — drop the bundled `dist/` on Flexweg without editing `.env` and the app shows an in-browser **SetupForm**. It collects Firebase config + bootstrap admin email + Flexweg API key, then writes a populated `config.js` back to your Flexweg site so every browser boots straight into the app without re-running the form. `.env` is now optional — useful for non-developer deployments.
 - **7 admin languages** — UI translated into English, French, German, Spanish, Dutch, Portuguese, Korean. Resolves from `localStorage` → `navigator.language` → English. Switchable from anywhere via the flag chip.
@@ -60,6 +61,24 @@ npm run preview   # serve the static build locally
 The dev server runs at <http://localhost:5173>.
 
 ---
+
+## Choosing a data backend
+
+At first run the SetupForm asks you to pick how the Kanban stores its data. Both choices keep the app fully static on Flexweg — the difference is what's on the other end of the wire:
+
+| | **Firebase** | **Flexweg SQLite** |
+| --- | --- | --- |
+| External services | Firebase project (free Spark plan) + Flexweg site | Flexweg site only |
+| Authentication | Firebase email/password + per-user roles | Email/password via the Flexweg SQLite Auth API (bcrypt server-side) + per-user roles |
+| Real-time updates | Push (`onSnapshot`) | Polling (~4 s via `/api/v1/sqlite/version`) |
+| Atomic concurrent writes | Yes (Firestore transactions) | Yes (server-side Symfony Lock + SQLite transactions) |
+| Attachments | ✅ 10 MB files via Flexweg Files API | ✅ 10 MB files via Flexweg Files API (master key persisted in SQLite `config` table) |
+| Setup friction | ~5 min Firebase Console click-through + paste keys | ~30 s (paste Flexweg API key, set admin email/password, click install) |
+| Best for | Teams needing the full Firebase ecosystem | Teams wanting a self-contained, Flexweg-only deployment |
+
+You can switch backends later from **Settings → Data backend**, but switching wipes the current data (no automatic migration). The previous backend's data stays where it is and can be re-attached by switching back.
+
+The Firebase setup below is required if you choose Firebase. If you choose SQLite, jump to [Flexweg SQLite setup](#flexweg-sqlite-setup) instead.
 
 ## Firebase setup
 
@@ -209,6 +228,67 @@ Firestore will prompt you in the browser console with a one-click link the first
 - `sprints` ordered by `createdAt desc`
 - `tickets where sprintId == X`
 - `sprints where status == "active"`
+
+---
+
+## Flexweg SQLite setup
+
+(Skip this section if you chose Firebase above.)
+
+The SQLite backend uses the Flexweg [SQLite Database API](https://documentation.flexweg.com/api-reference/sqlite). The actual database file lives on **your own Flexweg site's S3 storage** (at the path you choose, e.g. `kanban/db.sqlite`). All reads and writes go through `static-host`'s `/api/v1/sqlite/*` endpoints — concurrency is handled server-side by Symfony Lock + SQLite transactions.
+
+### What you need
+
+1. A Flexweg account on a plan with enough quota for one extra file (the `.sqlite` blob) and the API calls you'll make. The Free tier (2 MB total) is too tight for real use; Standard and above work.
+2. Your **master Flexweg API key** (from Account → API in your Flexweg dashboard). You'll paste it **once** during install — the SetupForm exchanges it for a **scoped Sqlite token** that's strictly limited to one SQLite file and persisted in `config.js`. The master key is never saved.
+
+### Install flow
+
+1. Reach the SetupForm (either fresh deployment or after clicking "Switch backend" in Settings).
+2. Pick **Flexweg SQLite** on the backend choice step.
+3. Fill the form:
+   - **API key** — your master Flexweg key (one-time use).
+   - **Site URL** — `https://your-site.flexweg.com` (pre-filled from `window.location.origin`).
+   - **API base URL** — defaults to `https://www.flexweg.com/api/v1`, override only if you self-host.
+   - **SQLite path** — defaults to `<app-folder>/db.sqlite`. Each project on your site gets its own SQLite (`kanban/db.sqlite`, `blog/posts.sqlite`, …).
+4. Click **Install**. The form:
+   1. `POST /api/v1/sqlite/auth/install` — exchange master key for scoped token bound to the chosen path
+   2. Apply the new runtime config locally
+   3. Bootstrap the schema (`CREATE TABLE` for tickets/sprints/workflow/comments/users/config + seed the default workflow)
+   4. Upload `config.js` to Flexweg using the master key (one last use)
+   5. Reload — the app boots into SQLite mode and the scoped token is the only credential in `config.js`
+
+### Identity in SQLite mode
+
+Real email + password authentication, backed by the [Flexweg SQLite Auth API](https://documentation.flexweg.com/api-reference/sqlite-auth):
+
+- The admin account is created during install (you enter an email + password on the install form).
+- The first registered user is **automatically promoted to admin** (server-side rule).
+- Subsequent team members sign up via the **Create account** tab on the login screen. They get the `user` role by default; an admin can promote them from the Users page.
+- Passwords are **bcrypt-hashed server-side** (PHP `password_hash`, cost 12) — hashes never leave Flexweg's MySQL.
+- After login, the browser receives an opaque **session token** (30-day sliding expiry) stored in `localStorage` and sent as `X-Sqlite-User-Token` on every SQLite request alongside the scoped token.
+- The scoped token (in `config.js`) is gated by `requireUserAuth=true` — without a valid user token, every CRUD endpoint returns 401.
+
+**Security model**: the scoped token in `config.js` plus a valid user session are both required for any read or write. Compromising `config.js` alone gives an attacker no data access — they still need a working login.
+
+### What works (and doesn't) vs Firebase mode
+
+| Feature | Firebase mode | SQLite mode |
+| --- | --- | --- |
+| Tickets, sprints, workflow, epics, drag-drop | ✅ | ✅ |
+| Rich-text descriptions | ✅ | ✅ |
+| Checklist | ✅ | ✅ |
+| Comments | ✅ | ✅ |
+| Users page (promote / demote / disable) | ✅ | ✅ (browser-local identities) |
+| Real-time push between teammates | ✅ instant | ⏱️ ~4 s polling |
+| Attachments | ✅ 10 MB | ✅ 10 MB |
+| Password reset | ✅ Firebase Auth | ⛔ N/A (no passwords) |
+
+### Switching between backends later
+
+Go to **Settings → Data backend** and click **Switch backend**. This wipes the in-browser runtime config and reloads into the SetupForm. The previous backend's data is **not deleted** — it stays in Firestore or in the `.sqlite` file — but the Kanban won't read it again until you switch back.
+
+For SQLite mode, the Settings panel offers a **"Download backup"** link pointing to the public URL of the `.sqlite` file (via the regular Flexweg Files API). Grab it before switching if you might want to restore later.
 
 ### 8. Deploy to Flexweg
 
@@ -379,7 +459,7 @@ Tickets accept file uploads up to **10 MB each** stored on your Flexweg site via
    - **Site URL** — the public URL of your Flexweg site, e.g. `https://your-site.flexweg.com` (no trailing slash). Used to build download URLs.
    - **API key** — paste the permanent key from step 1.
    - **API base URL** — defaults to `https://www.flexweg.com/api/v1`. Override only if your account uses a different host.
-3. Click **Save**. Configuration is written to Firestore at `config/flexweg`. Until this is done, the **Attachments** tab on tickets shows a "not configured" message instead of the drop zone.
+3. Click **Save**. Configuration is written to Firestore at `config/flexweg` (Firebase mode) or to the local SQLite `config` table (SQLite mode). Until this is done, the **Attachments** tab on tickets shows a "not configured" message instead of the drop zone. In SQLite mode the install flow persists the key automatically using the value you typed for `/auth/install`, so attachments work out of the box.
 
 **Storage layout**: `attachments/{ticketId}/{attachmentId}-{filename}` on your Flexweg site. Folders are created automatically by the Files API. Attachment metadata (name, content type, size, public URL, uploader, timestamp) lives in `tickets/{id}.attachments[]` so the list reads back without any extra API calls.
 

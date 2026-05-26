@@ -1,47 +1,17 @@
-import {
-  onAuthStateChanged,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signOut as fbSignOut,
-  type User as FirebaseUser,
-} from "firebase/auth";
-import { getAuthClient } from "./firebase";
+// Backend dispatcher for the auth service.
+//
+// Note: in flexweg-sqlite mode, `signIn` and `sendResetEmail` are
+// stubs that throw — auth is browser-local and bypasses these calls
+// entirely (see context/AuthContext.tsx branching on backend).
 
-export function subscribeToAuth(onChange: (user: FirebaseUser | null) => void): () => void {
-  return onAuthStateChanged(getAuthClient(), onChange);
-}
+import { getBackendKind } from "../lib/runtimeConfig";
+import * as firebase from "./firebase/auth";
+import * as sqlite from "./flexweg-sqlite/auth";
 
-export async function signIn(email: string, password: string): Promise<FirebaseUser> {
-  const cred = await signInWithEmailAndPassword(getAuthClient(), email.trim(), password);
-  return cred.user;
-}
+const impl = getBackendKind() === "flexweg-sqlite" ? sqlite : firebase;
 
-export async function signOut(): Promise<void> {
-  return fbSignOut(getAuthClient());
-}
-
-export async function sendResetEmail(email: string): Promise<void> {
-  return sendPasswordResetEmail(getAuthClient(), email.trim());
-}
-
-// Maps Firebase Auth error codes to user-facing messages.
-export function describeAuthError(err: unknown): string {
-  const e = err as { code?: string; message?: string } | null;
-  const code = e?.code ?? "";
-  switch (code) {
-    case "auth/invalid-email":
-      return "Invalid email address.";
-    case "auth/invalid-credential":
-    case "auth/wrong-password":
-    case "auth/user-not-found":
-      return "Invalid email or password.";
-    case "auth/too-many-requests":
-      return "Too many attempts. Try again later or reset your password.";
-    case "auth/user-disabled":
-      return "This account has been disabled.";
-    case "auth/network-request-failed":
-      return "Network error. Check your connection.";
-    default:
-      return e?.message ?? "Authentication failed.";
-  }
-}
+export const subscribeToAuth = impl.subscribeToAuth;
+export const signIn = impl.signIn;
+export const signOut = impl.signOut;
+export const sendResetEmail = impl.sendResetEmail;
+export const describeAuthError = impl.describeAuthError;

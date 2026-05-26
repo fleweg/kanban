@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { User as FirebaseUser } from "firebase/auth";
 import { subscribeToAuth, signIn, signOut } from "../services/auth";
 import { ensureSelfUserRecord, USER_ROLES } from "../services/users";
-import { getAdminEmail } from "../services/firebase";
+import { getAdminEmail } from "../services/firebaseClient";
 import type { UserRecord, UserRole } from "../types";
 
 interface AuthValue {
