@@ -24,6 +24,85 @@
     },
     "footer": "Account requests go through your administrator."
   },
+  "identity": {
+    "brandTitle": "Kanban",
+    "brandSubtitle": "Sprints & Backlog",
+    "login": {
+      "heading": "Sign in",
+      "intro": "Use the email and password your admin shared with you.",
+      "submit": "Sign in",
+      "submitting": "Signing in…"
+    },
+    "fields": {
+      "name": "Display name (optional)",
+      "namePlaceholder": "Jane Doe",
+      "email": "Email",
+      "password": "Password",
+      "passwordHint": "At least 8 characters."
+    },
+    "footer": "New accounts are created by an admin from the Users page.",
+    "errors": {
+      "invalidEmail": "Please enter a valid email address.",
+      "missingPassword": "Password is required.",
+      "passwordTooShort": "Password must be at least 8 characters."
+    }
+  },
+  "users": {
+    "title": "Users",
+    "descriptionFirebase": "Manage who can access this Kanban. Auth accounts are created in the Firebase Console; roles and access are managed here.",
+    "descriptionSqlite": "Manage who can access this Kanban. Create accounts here, then change roles or disable access as needed.",
+    "members": "Members",
+    "addUser": "Add user",
+    "addUserSuccess": "Account created for {{email}}.",
+    "loading": "Loading…",
+    "empty": {
+      "title": "No members yet",
+      "descriptionFirebase": "Once a new user signs in for the first time, they'll appear here.",
+      "descriptionSqlite": "Click \"Add user\" to create the first team member."
+    },
+    "roleAdmin": "Admin",
+    "roleUser": "User",
+    "bootstrap": "Bootstrap",
+    "disabled": "Disabled",
+    "you": "You",
+    "added": "Added",
+    "resetPassword": "Reset password",
+    "resetPasswordTitle": "Send password reset email",
+    "resetPasswordSent": "Reset email sent to {{email}}.",
+    "demote": "Demote",
+    "demoteTitle": "Demote to user",
+    "demoteBootstrapTitle": "Bootstrap admin cannot be demoted",
+    "promote": "Promote",
+    "promoteTitle": "Promote to admin",
+    "enable": "Enable",
+    "disable": "Disable",
+    "remove": "Remove",
+    "removeBootstrapTitle": "Bootstrap admin record cannot be removed from here",
+    "removeFirebaseTitle": "Remove access record (does not delete the Firebase Auth account)",
+    "removeSqliteTitle": "Delete this account permanently",
+    "removeConfirmFirebase": "Remove access for {{email}}? They lose access immediately. To fully delete the account, also remove it from Firebase Authentication console.",
+    "removeConfirmSqlite": "Permanently delete the account for {{email}}? They lose access immediately and the account cannot be recovered.",
+    "help": {
+      "title": "How to add a new member",
+      "firebase": {
+        "step1": "Open Firebase Console → Authentication → Users → Add user and create the account with email + password.",
+        "step2": "Share the credentials with the new member.",
+        "step3": "On their first sign-in, their record appears in this list with role user. Promote to admin if needed."
+      },
+      "sqlite": {
+        "step1": "Click the Add user button above and fill in their email + password (and optional display name).",
+        "step2": "Share the credentials with the new member — they can sign in immediately.",
+        "step3": "By default new accounts get the user role. Promote to admin from this list if needed."
+      },
+      "bootstrapLine": "Bootstrap admin (from .env):"
+    },
+    "addUserModal": {
+      "title": "Add a new user",
+      "intro": "Create an account on the SQLite Auth API. The new user can sign in straight away with these credentials.",
+      "submit": "Create account",
+      "submitting": "Creating…"
+    }
+  },
   "setup": {
     "title": "Kanban setup",
     "subtitle": "First-run configuration",
@@ -32,7 +111,30 @@
       "welcome": "Welcome",
       "firebase": "Firebase",
       "flexweg": "Flexweg",
-      "terms": "Terms"
+      "terms": "Terms",
+      "backend": "Backend",
+      "sqlite": "SQLite"
+    },
+    "backend": {
+      "heading": "Choose your data backend",
+      "intro": "Where does your Kanban store its data? Pick one — you can switch later, but switching wipes the current data.",
+      "continue": "Continue with selected backend",
+      "sqliteTitle": "Flexweg SQLite",
+      "sqliteHint": "Hosted on your own Flexweg site. No external service. Email + password sign-in (bcrypt server-side), 30-day sessions, ~4s polling.",
+      "firebaseTitle": "Firebase",
+      "firebaseHint": "Firestore + Firebase Auth. Real-time sync (no polling), per-user roles. Needs a free Firebase project and ~5 min of one-time setup."
+    },
+    "sqlite": {
+      "heading": "Connect your Flexweg site",
+      "intro": "We'll use your master Flexweg API key ONCE to create a scoped token for the SQLite database. After install, the master key is discarded and only the scoped token (limited to this one SQLite file) is stored.",
+      "apiKeyHint": "Master Flexweg API key. Used only to install — never stored after.",
+      "detectedFromUrl": "Detected from URL",
+      "advanced": "Advanced settings (Site URL, SQLite path…)",
+      "pathHint": "Where the SQLite file lives on your Flexweg site. Folders are created automatically.",
+      "adminHeading": "Admin account",
+      "adminIntro": "Create the first user — this account gets admin rights automatically. Subsequent members register from the login screen.",
+      "passwordHint": "At least 8 characters.",
+      "submit": "Install SQLite database"
     },
     "terms": {
       "title": "Terms of use",
@@ -71,12 +173,10 @@
     },
     "welcome": {
       "heading": "Welcome to your Kanban",
-      "intro": "This first-run setup wires the Kanban to a Firebase project for data + authentication, then to your Flexweg site for ticket attachments. It takes about two minutes once you have a Firebase project.",
-      "firebaseTitle": "Firebase project required",
-      "firebaseBody": "The Kanban needs a free Firebase project (Spark plan is fine — no billing required). You'll need its Web app config plus an Authentication user that will become the bootstrap admin. Email/Password sign-in must be enabled.",
-      "tutorialUrl": "https://firebase.google.com/docs/web/setup",
-      "tutorialButton": "Firebase setup guide",
-      "haveAccountButton": "I have a Firebase project"
+      "intro": "This first-run setup wires the Kanban to a data backend so it can store your tickets, sprints and comments. You'll pick the backend on the next step (Firebase or Flexweg's hosted SQLite), then plug in the credentials. The whole thing takes a couple of minutes.",
+      "choiceTitle": "Two backends to choose from",
+      "choiceBody": "Firebase gives you full multi-user auth and instant real-time updates, but needs a free Firebase project. Flexweg SQLite needs no external service — the database lives on your own Flexweg site — and is the lowest-friction option for an internal team.",
+      "continue": "Continue"
     },
     "sections": {
       "firebase": "Firebase",
@@ -103,21 +203,28 @@
       "adminPassword": "Admin password",
       "flexwegApiKey": "API key",
       "flexwegSiteUrl": "Site URL",
-      "flexwegApiBaseUrl": "API base URL"
+      "flexwegApiBaseUrl": "API base URL",
+      "sqlitePath": "SQLite path"
     },
     "steps": {
       "signIn": "Signing in to Firebase…",
       "verifyEmail": "Verifying admin email match…",
       "testFlexweg": "Testing Flexweg API key…",
       "writeFirestore": "Writing config/flexweg to Firestore…",
-      "uploadConfig": "Uploading config.js to Flexweg…"
+      "uploadConfig": "Uploading config.js to Flexweg…",
+      "sqliteInstall": "Creating scoped SQLite token…",
+      "sqliteRegisterAdmin": "Registering the admin account…",
+      "sqliteSchema": "Bootstrapping SQLite schema…"
     },
     "stepsDone": {
       "signIn": "Signed in to Firebase",
       "verifyEmail": "Admin email match verified",
       "testFlexweg": "Flexweg API key verified",
       "writeFirestore": "Firestore config saved",
-      "uploadConfig": "config.js uploaded"
+      "uploadConfig": "config.js uploaded",
+      "sqliteInstall": "Scoped SQLite token issued",
+      "sqliteRegisterAdmin": "Admin registered and signed in",
+      "sqliteSchema": "SQLite schema ready"
     },
     "continueToFlexweg": "Continue to Flexweg",
     "submit": "Finish setup",

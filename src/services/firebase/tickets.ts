@@ -1,0 +1,135 @@
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from "firebase/firestore";
+import { collections, getDb } from "../firebaseClient";
+import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
+import { deleteAllAttachmentsForTicket } from "./attachments";
+import type { Attachment, ChecklistItem, IssueType, Priority, Ticket } from "../../types";
+
+const ticketsCollection = () => collection(getDb(), collections.tickets);
+const ticketDoc = (id: string) => doc(getDb(), collections.tickets, id);
+
+export function subscribeToTickets(
+  onChange: (tickets: Ticket[]) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  const q = query(ticketsCollection(), orderBy("createdAt", "desc"));
+  return onSnapshot(
+    q,
+    (snap) => {
+      const tickets = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Ticket);
+      onChange(tickets);
+    },
+    onError,
+  );
+}
+
+export interface CreateTicketInput {
+  title: string;
+  description?: string;
+  priority?: Priority;
+  sprintId?: string | null;
+  status?: string | null;
+  createdBy?: string | null;
+  assigneeId?: string | null;
+  type?: IssueType;
+  epicId?: string | null;
+}
+
+export async function createTicket({
+  title,
+  description = "",
+  priority = "medium",
+  sprintId = null,
+  status = null,
+  createdBy = null,
+  assigneeId = null,
+  type = DEFAULT_ISSUE_TYPE,
+  epicId = null,
+}: CreateTicketInput) {
+  // Epics are project-level containers — they never live in a sprint or in a
+  // workflow column, and they cannot belong to another epic.
+  const isEpicType = type === EPIC_TYPE;
+  return addDoc(ticketsCollection(), {
+    title: title.trim(),
+    description: description.trim(),
+    priority,
+    sprintId: isEpicType ? null : sprintId,
+    status: isEpicType ? null : status,
+    createdBy,
+    assigneeId,
+    type,
+    epicId: isEpicType ? null : epicId,
+    // Initial order = now, so newly created tickets land at the top of their
+    // list (descending sort). Drag-reorder writes new midpoint values later.
+    order: Date.now(),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// Used by drag-and-drop handlers. Updates the order and optionally the column
+// (status) atomically — relevant for cross-column drops on the Kanban board.
+export async function reorderTicket(
+  id: string,
+  { order, status }: { order: number; status?: string },
+): Promise<void> {
+  const data: Record<string, unknown> = { order, updatedAt: serverTimestamp() };
+  if (status !== undefined) data.status = status;
+  return updateDoc(ticketDoc(id), data);
+}
+
+export type UpdateTicketInput = Partial<
+  Pick<Ticket, "title" | "description" | "priority" | "status" | "sprintId" | "assigneeId" | "type" | "epicId">
+>;
+
+export async function updateTicket(id: string, data: UpdateTicketInput): Promise<void> {
+  return updateDoc(ticketDoc(id), {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteTicket(id: string): Promise<void> {
+  // Best-effort cleanup of Flexweg-hosted attachments before removing the
+  // doc — otherwise we'd leave orphaned blobs counting against the site's
+  // file quota. Read the attachments off the doc first since the cleanup
+  // helper walks the array (we don't list-from-Flexweg, that'd be a
+  // separate paginated API call). Failures are logged inside the helper —
+  // they never block the Firestore deletion.
+  const snap = await getDoc(ticketDoc(id));
+  const attachments = (snap.data()?.attachments ?? []) as Attachment[];
+  await deleteAllAttachmentsForTicket(id, attachments);
+  return deleteDoc(ticketDoc(id));
+}
+
+export async function moveTicketToSprint(id: string, sprintId: string, status: string | null): Promise<void> {
+  return updateTicket(id, { sprintId, status });
+}
+
+export async function moveTicketToBacklog(id: string): Promise<void> {
+  return updateTicket(id, { sprintId: null, status: null });
+}
+
+export async function changeTicketStatus(id: string, status: string): Promise<void> {
+  return updateTicket(id, { status });
+}
+
+// Replaces the whole checklist array. Add/toggle/edit/remove/reorder all
+// rebuild the array on the client and call this single setter — keeps
+// concurrent writes from different fields from clobbering each other.
+export async function updateChecklist(id: string, checklist: ChecklistItem[]): Promise<void> {
+  return updateDoc(ticketDoc(id), {
+    checklist,
+    updatedAt: serverTimestamp(),
+  });
+}

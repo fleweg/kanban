@@ -12,9 +12,10 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { EpicsPage } from "./pages/EpicsPage";
 import { LoginPage } from "./pages/LoginPage";
+import { LocalIdentityPage } from "./pages/LocalIdentityPage";
 import { SetupForm } from "./pages/SetupForm";
 import { ErrorScreen } from "./components/ErrorScreen";
-import { getRuntimeConfig } from "./lib/runtimeConfig";
+import { getBackendKind, getRuntimeConfig } from "./lib/runtimeConfig";
 
 interface BoundaryState {
   error: Error | null;
@@ -57,7 +58,11 @@ function AuthenticatedShell() {
 
   if (loading) return <FullScreenSpinner />;
 
-  if (!user) return <LoginPage />;
+  if (!user) {
+    // SQLite mode has no email/password sign-in — show the identity
+    // prompt instead. LoginPage is Firebase-only.
+    return getBackendKind() === "flexweg-sqlite" ? <LocalIdentityPage /> : <LoginPage />;
+  }
 
   if (error) {
     return (

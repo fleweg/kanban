@@ -9,7 +9,9 @@ import {
 } from "../lib/runtimeConfig";
 
 export function getAdminEmail(): string {
-  const v = getRuntimeConfig()?.adminEmail;
+  const cfg = getRuntimeConfig();
+  if (cfg?.backend !== "firebase") return "";
+  const v = cfg.adminEmail;
   return typeof v === "string" ? v.trim().toLowerCase() : "";
 }
 
@@ -31,6 +33,11 @@ function getApp(): FirebaseApp {
   if (!config) {
     throw new Error(
       "Firebase config not available. The runtime resolver returned null — either fill .env or complete the in-app SetupForm.",
+    );
+  }
+  if (config.backend !== "firebase") {
+    throw new Error(
+      `Firebase service called while the active backend is "${config.backend}". This indicates a backend-dispatch bug — services/index.ts should have routed to a non-Firebase implementation.`,
     );
   }
   cachedApp = getApps()[0] ?? initializeApp(config.firebase);
@@ -59,6 +66,9 @@ export function getAuthClient(): Auth {
 // window.__FLEXWEG_CONFIG__ (which we set here as a side effect so
 // the rest of the codebase stays in sync without a reload).
 export function initFirebaseFromSetup(config: FlexwegRuntimeConfig): void {
+  if (config.backend !== "firebase") {
+    throw new Error(`initFirebaseFromSetup called with a non-Firebase config (backend: ${config.backend})`);
+  }
   // Idempotent: if Firebase was already initialised on a previous
   // submit attempt that failed mid-flow, reuse the cached app
   // silently. Throwing here would make the SetupForm's catch block

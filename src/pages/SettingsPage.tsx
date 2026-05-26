@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { Cloud, Save, Settings as SettingsIcon } from "lucide-react";
+import {
+  AlertTriangle,
+  Cloud,
+  Database,
+  Download,
+  Flame,
+  RefreshCw,
+  Save,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { useAppData } from "../context/AppDataContext";
 import { useAuth } from "../context/AuthContext";
@@ -9,9 +18,11 @@ import {
   getFlexwegConfig,
   setFlexwegConfig,
 } from "../services/flexwegConfig";
+import { getBackendKind, getRuntimeConfig } from "../lib/runtimeConfig";
 
 export function SettingsPage() {
   const { isAdmin } = useAuth();
+  const backend = getBackendKind();
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto">
@@ -22,7 +33,119 @@ export function SettingsPage() {
 
       <WorkflowSettings />
 
-      {isAdmin && <FlexwegApiSettings />}
+      {/* Flexweg attachments config works in both backends — the
+          dispatcher routes reads/writes to Firestore (Firebase) or
+          to the local SQLite `config` table. Same admin-only-write,
+          all-active-users-read posture. */}
+      {isAdmin && <FlexwegApiSettings backend={backend} />}
+
+      {isAdmin && <BackendSettings backend={backend} />}
+    </div>
+  );
+}
+
+// Backend switcher (admin-only). Shows the current backend and a
+// switch button that wipes config.js, forcing the app back through
+// the SetupForm where the user picks the other backend. **Data is
+// NOT migrated** — the new backend starts empty. A "Download backup"
+// link surfaces above the switch button for SQLite mode so the user
+// can grab a copy of their .sqlite file via the Files API URL.
+function BackendSettings({ backend }: { backend: ReturnType<typeof getBackendKind> }) {
+  const [confirming, setConfirming] = useState(false);
+  const config = getRuntimeConfig();
+  const isFirebase = backend === "firebase";
+  const isSqlite = backend === "flexweg-sqlite";
+  const backupHref =
+    config && config.backend === "flexweg-sqlite"
+      ? `${config.flexweg.siteUrl}/${config.flexweg.sqlitePath}`
+      : null;
+
+  function switchBackend() {
+    // Clear the in-browser runtime config and force a reload. The
+    // app boots into the SetupForm because getRuntimeConfig() returns
+    // null. The previous config.js is overwritten when the user
+    // completes setup with the new backend.
+    if (typeof window !== "undefined") {
+      window.__FLEXWEG_CONFIG__ = null;
+      const next = new URL(window.location.href);
+      next.searchParams.set("_setup", String(Date.now()));
+      window.location.replace(next.toString());
+    }
+  }
+
+  return (
+    <div className="card p-5 mt-4">
+      <div className="flex items-center gap-2 mb-4">
+        <RefreshCw className="h-4 w-4 text-surface-500 dark:text-surface-400" />
+        <h2 className="text-sm font-semibold">Data backend</h2>
+      </div>
+
+      <p className="text-sm text-surface-600 mb-3 dark:text-surface-300">
+        Active backend:{" "}
+        <span className="inline-flex items-center gap-1.5 font-medium text-surface-900 dark:text-surface-50">
+          {isFirebase ? (
+            <>
+              <Flame className="h-3.5 w-3.5 text-amber-500" />
+              Firebase
+            </>
+          ) : isSqlite ? (
+            <>
+              <Database className="h-3.5 w-3.5 text-emerald-500" />
+              Flexweg SQLite
+            </>
+          ) : (
+            "Unknown"
+          )}
+        </span>
+      </p>
+
+      {isSqlite && backupHref && (
+        <p className="text-xs text-surface-500 mb-3 dark:text-surface-400">
+          <a
+            href={backupHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-blue-600 hover:underline dark:text-blue-400"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Download a backup of the .sqlite file
+          </a>{" "}
+          before switching backends.
+        </p>
+      )}
+
+      {!confirming ? (
+        <button type="button" className="btn-secondary" onClick={() => setConfirming(true)}>
+          Switch backend…
+        </button>
+      ) : (
+        <div className="rounded-lg bg-amber-50 ring-1 ring-amber-200 p-4 dark:bg-amber-900/20 dark:ring-amber-700/40">
+          <div className="flex gap-3">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              <p className="font-medium">All current data will be lost.</p>
+              <p className="mt-1 text-xs leading-relaxed">
+                Switching wipes the in-browser config and reloads into the setup form. The new
+                backend starts empty — the previous backend's data stays where it is (in
+                Firestore or as a .sqlite file on Flexweg), but the Kanban will not read it
+                anymore until you switch back.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button type="button" className="btn-danger text-xs" onClick={switchBackend}>
+                  Yes, switch backend
+                </button>
+                <button
+                  type="button"
+                  className="btn-ghost text-xs"
+                  onClick={() => setConfirming(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -124,10 +247,10 @@ function WorkflowSettings() {
   );
 }
 
-// Admin-only block. Stores the Flexweg API key in Firestore at
-// `config/flexweg`. Firestore rules gate writes to admins; reads are open to
-// active users so the attachments service can fetch the key on demand.
-function FlexwegApiSettings() {
+// Admin-only block. Stores the Flexweg API key — in Firebase mode at
+// Firestore `config/flexweg`, in SQLite mode in the local `config`
+// table. Both rely on the backend dispatcher in services/flexwegConfig.ts.
+function FlexwegApiSettings({ backend }: { backend: ReturnType<typeof getBackendKind> }) {
   const [siteUrl, setSiteUrl] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_FLEXWEG_API_BASE_URL);
@@ -214,7 +337,8 @@ function FlexwegApiSettings() {
         >
           Flexweg account
         </a>
-        . The key is stored in Firestore — readable by any signed-in team member, writable by admins only.
+        . The key is stored {backend === "flexweg-sqlite" ? "in the local SQLite database" : "in Firestore"} —
+        readable by any signed-in team member, writable by admins only.
       </p>
 
       {loading ? (
