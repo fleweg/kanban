@@ -43,6 +43,8 @@ export interface Ticket {
   assigneeId: string | null;
   type: IssueType;
   epicId: string | null;
+  // Owning team. Defaults to GENERAL_TEAM_ID for legacy tickets.
+  teamId: string;
   order?: number;
   checklist?: ChecklistItem[];
   attachments?: Attachment[];
@@ -58,9 +60,17 @@ export interface Sprint {
   name: string;
   goal: string;
   status: SprintStatus;
+  teamId: string;
   createdAt?: Timestamp;
   startedAt?: Timestamp;
   endedAt?: Timestamp | null;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt?: Timestamp;
 }
 
 export interface WorkflowColumn {
@@ -92,6 +102,7 @@ export interface UserRecord {
   email: string;
   role: UserRole;
   disabled: boolean;
+  teamIds: string[];
   createdAt?: Timestamp;
   createdBy?: string;
 }

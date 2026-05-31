@@ -177,8 +177,19 @@ service cloud.firestore {
     match /tickets/{id} { allow read, write: if isActiveUser(); }
     match /sprints/{id} { allow read, write: if isActiveUser(); }
 
+    // Teams catalog — readable by every active member (the team
+    // switcher and assignee picker render the list), writable only by
+    // admins (create/rename/delete on the /teams page).
+    match /teams/{id} {
+      allow read:  if isActiveUser();
+      allow write: if isAdmin();
+    }
+
     // Workflow JSON is editable by every active member (Settings page).
     match /config/workflow { allow read, write: if isActiveUser(); }
+    // One-shot migration flags (teams backfill). The first authenticated
+    // boot writes the flag so the migration only runs once per project.
+    match /config/migrations { allow read, write: if isActiveUser(); }
     // Flexweg API key — readable by active users (the attachments service
     // needs it to upload), writable only by admins.
     match /config/flexweg  {
@@ -201,11 +212,14 @@ service cloud.firestore {
       allow get: if signedIn() && (request.auth.uid == uid || isActiveUser());
       allow list: if isActiveUser();
 
-      // Self-create on first login: any signed-in user can create their own record with role "user".
+      // Self-create on first login: any signed-in user can create their
+      // own record with role "user". teamIds must be a list — every new
+      // user is auto-enrolled in the default "general" team.
       allow create: if signedIn()
                     && request.auth.uid == uid
                     && request.resource.data.role == "user"
-                    && request.resource.data.disabled == false;
+                    && request.resource.data.disabled == false
+                    && request.resource.data.teamIds is list;
       allow update, delete: if isAdmin();
     }
   }

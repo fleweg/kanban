@@ -10,6 +10,7 @@ import { ActiveSprintPage } from "./pages/ActiveSprintPage";
 import { SprintsPage } from "./pages/SprintsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
+import { TeamsPage } from "./pages/TeamsPage";
 import { EpicsPage } from "./pages/EpicsPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LocalIdentityPage } from "./pages/LocalIdentityPage";
@@ -91,6 +92,7 @@ function AuthenticatedShell() {
           <Route path="/backlog" element={<BacklogPage />} />
           <Route path="/sprints" element={<SprintsPage />} />
           <Route path="/epics" element={<EpicsPage />} />
+          <Route path="/teams" element={<TeamsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route
             path="/users"

@@ -13,6 +13,7 @@
 // camelCase TypeScript domain types.
 
 import { DEFAULT_ISSUE_TYPE } from "../../lib/issueTypes";
+import { GENERAL_TEAM_ID, GENERAL_TEAM_NAME } from "../../lib/teams";
 import { getDefaultWorkflow } from "../firebase/workflow";
 import { sqlBatch, sqlExec, sqlQuery } from "./client";
 
@@ -36,12 +37,14 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
       name TEXT NOT NULL,
       goal TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL,
+      team_id TEXT NOT NULL DEFAULT 'general',
       created_at INTEGER NOT NULL,
       started_at INTEGER,
       ended_at INTEGER
     )`,
   },
   { sql: `CREATE INDEX IF NOT EXISTS idx_sprints_status ON sprints(status)` },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_sprints_team ON sprints(team_id)` },
 
   // -- tickets ---------------------------------------------------------
   {
@@ -54,6 +57,7 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
       sprint_id TEXT,
       status TEXT,
       epic_id TEXT,
+      team_id TEXT NOT NULL DEFAULT 'general',
       created_by TEXT,
       assignee_id TEXT,
       "order" REAL,
@@ -67,6 +71,7 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
   { sql: `CREATE INDEX IF NOT EXISTS idx_tickets_sprint ON tickets(sprint_id)` },
   { sql: `CREATE INDEX IF NOT EXISTS idx_tickets_epic ON tickets(epic_id)` },
   { sql: `CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status)` },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_tickets_team ON tickets(team_id)` },
   { sql: `CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at DESC)` },
 
   // -- comments --------------------------------------------------------
@@ -86,6 +91,25 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
   },
   { sql: `CREATE INDEX IF NOT EXISTS idx_comments_ticket ON comments(ticket_id)` },
 
+  // -- teams -----------------------------------------------------------
+  {
+    sql: `CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT,
+      created_at INTEGER NOT NULL
+    )`,
+  },
+  {
+    sql: `CREATE TABLE IF NOT EXISTS team_members (
+      team_id TEXT NOT NULL,
+      uid TEXT NOT NULL,
+      PRIMARY KEY (team_id, uid),
+      FOREIGN KEY(team_id) REFERENCES teams(id) ON DELETE CASCADE
+    )`,
+  },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_team_members_uid ON team_members(uid)` },
+
   // -- config (workflow JSON + future single-row config rows) ----------
   {
     sql: `CREATE TABLE IF NOT EXISTS config (
@@ -96,11 +120,16 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
 ];
 
 // Initialises a fresh SQLite: creates all tables + indexes + seeds the
-// default workflow JSON if not present. Idempotent — safe to call on
-// every boot to handle schema additions.
+// default workflow JSON + general team if not present. Idempotent —
+// safe to call on every boot to handle schema additions. Also runs the
+// one-shot team backfill for pre-teams deployments.
 export async function ensureSchema(): Promise<void> {
   await sqlBatch(SCHEMA_STATEMENTS);
   await seedDefaultWorkflowIfMissing();
+  await seedGeneralTeamIfMissing();
+  await ensureTeamIdColumn("tickets");
+  await ensureTeamIdColumn("sprints");
+  await runTeamBackfillOnce();
 }
 
 async function seedDefaultWorkflowIfMissing(): Promise<void> {
@@ -113,6 +142,54 @@ async function seedDefaultWorkflowIfMissing(): Promise<void> {
   await sqlExec("INSERT INTO config (key, value) VALUES (?, ?)", [
     "workflow",
     JSON.stringify(wf),
+  ]);
+}
+
+async function seedGeneralTeamIfMissing(): Promise<void> {
+  await sqlExec(
+    "INSERT OR IGNORE INTO teams (id, name, color, created_at) VALUES (?, ?, ?, ?)",
+    [GENERAL_TEAM_ID, GENERAL_TEAM_NAME, "slate", Date.now()],
+  );
+}
+
+// PRAGMA table_info returns one row per column. Older pre-teams
+// SQLite files lack the team_id column on tickets/sprints; this
+// adds it lazily so we don't lose data on schema bump.
+async function ensureTeamIdColumn(table: "tickets" | "sprints"): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(${table})`);
+  if (rows.some((r) => r.name === "team_id")) return;
+  await sqlExec(
+    `ALTER TABLE ${table} ADD COLUMN team_id TEXT NOT NULL DEFAULT '${GENERAL_TEAM_ID}'`,
+  );
+}
+
+// One-shot backfill: assigns the general team to every legacy row
+// without a teamId, and enrolls every existing user as a member of
+// the general team. Guarded by a config flag so it only runs once
+// per deployment.
+async function runTeamBackfillOnce(): Promise<void> {
+  const { rows } = await sqlQuery<{ value: string }>(
+    "SELECT value FROM config WHERE key = ?",
+    ["team_backfill_done_at"],
+  );
+  if (rows.length > 0) return;
+  await sqlBatch([
+    {
+      sql: `UPDATE tickets SET team_id = ? WHERE team_id IS NULL OR team_id = ''`,
+      params: [GENERAL_TEAM_ID],
+    },
+    {
+      sql: `UPDATE sprints SET team_id = ? WHERE team_id IS NULL OR team_id = ''`,
+      params: [GENERAL_TEAM_ID],
+    },
+    {
+      sql: `INSERT OR IGNORE INTO team_members (team_id, uid) SELECT ?, uid FROM users`,
+      params: [GENERAL_TEAM_ID],
+    },
+    {
+      sql: `INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)`,
+      params: ["team_backfill_done_at", String(Date.now())],
+    },
   ]);
 }
 

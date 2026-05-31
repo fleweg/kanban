@@ -12,4 +12,5 @@ export const getUserRecord = impl.getUserRecord;
 export const ensureSelfUserRecord = impl.ensureSelfUserRecord;
 export const setUserRole = impl.setUserRole;
 export const setUserDisabled = impl.setUserDisabled;
+export const setUserTeams = impl.setUserTeams;
 export const deleteUserRecord = impl.deleteUserRecord;

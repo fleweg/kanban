@@ -20,6 +20,7 @@ export const updateTicket = impl.updateTicket;
 export const deleteTicket = impl.deleteTicket;
 export const moveTicketToSprint = impl.moveTicketToSprint;
 export const moveTicketToBacklog = impl.moveTicketToBacklog;
+export const moveTicketToTeam = impl.moveTicketToTeam;
 export const changeTicketStatus = impl.changeTicketStatus;
 export const updateChecklist = impl.updateChecklist;
 

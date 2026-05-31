@@ -1,9 +1,10 @@
 import { NavLink } from "react-router-dom";
-import { Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, type LucideIcon } from "lucide-react";
+import { Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { signOut } from "../../services/auth";
+import { TeamSwitcher } from "../teams/TeamSwitcher";
 
 interface NavItem {
   to: string;
@@ -16,6 +17,7 @@ const baseItems: NavItem[] = [
   { to: "/sprint", label: "Active Sprint", icon: LayoutGrid },
   { to: "/sprints", label: "Sprints", icon: Layers },
   { to: "/epics", label: "Epics", icon: Crown },
+  { to: "/teams", label: "Teams", icon: UsersRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -35,6 +37,9 @@ export function Sidebar() {
           <p className="text-sm font-semibold leading-none">Kanban</p>
           <p className="text-[11px] text-surface-500 mt-0.5 dark:text-surface-400">Sprints &amp; Backlog</p>
         </div>
+      </div>
+      <div className="px-3 pt-3 pb-1">
+        <TeamSwitcher className="w-full" />
       </div>
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {items.map(({ to, label, icon: Icon }) => (

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Modal } from "../ui/Modal";
 import { createSprint } from "../../services/sprints";
+import { useAppData } from "../../context/AppDataContext";
 
 interface SprintModalProps {
   open: boolean;
@@ -8,6 +9,7 @@ interface SprintModalProps {
 }
 
 export function SprintModal({ open, onClose }: SprintModalProps) {
+  const { currentTeamId } = useAppData();
   const [form, setForm] = useState({ name: "", goal: "" });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export function SprintModal({ open, onClose }: SprintModalProps) {
     setSubmitting(true);
     setError(null);
     try {
-      await createSprint(form);
+      await createSprint({ ...form, teamId: currentTeamId });
       onClose();
     } catch (err) {
       setError((err as Error).message);

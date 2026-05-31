@@ -8,6 +8,7 @@ import {
   UserX,
   Trash2,
   UserPlus,
+  UsersRound,
   Loader2,
   X,
 } from "lucide-react";
@@ -19,9 +20,14 @@ import {
   subscribeToUsers,
   setUserRole,
   setUserDisabled,
+  setUserTeams,
   deleteUserRecord,
   USER_ROLES,
 } from "../services/users";
+import { Modal } from "../components/ui/Modal";
+import { useAppData } from "../context/AppDataContext";
+import { GENERAL_TEAM_ID, getTeamColorClasses } from "../lib/teams";
+import { cn } from "../lib/utils";
 import { sendResetEmail, describeAuthError } from "../services/auth";
 import { getAdminEmail } from "../services/firebaseClient";
 import { getBackendKind } from "../lib/runtimeConfig";
@@ -34,12 +40,14 @@ import type { UserRecord } from "../types";
 export function UsersPage() {
   const { t } = useTranslation();
   const { user: currentUser } = useAuth();
+  const { teams, getTeamById } = useAppData();
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [teamsEditing, setTeamsEditing] = useState<UserRecord | null>(null);
 
   const isSqlite = getBackendKind() === "flexweg-sqlite";
 
@@ -163,6 +171,22 @@ export function UsersPage() {
                         )}
                       </div>
                       <p className="text-xs text-surface-500 mt-0.5 dark:text-surface-400">{t("users.added")} {formatDate(u.createdAt)}</p>
+                      {u.teamIds && u.teamIds.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                          {u.teamIds.map((tid) => {
+                            const team = getTeamById(tid);
+                            if (!team) return null;
+                            return (
+                              <span
+                                key={tid}
+                                className={cn("chip text-[10px]", getTeamColorClasses(team.color))}
+                              >
+                                {team.name}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -181,6 +205,17 @@ export function UsersPage() {
                         {t("users.resetPassword")}
                       </button>
                     )}
+
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs"
+                      title="Edit team memberships"
+                      onClick={() => setTeamsEditing(u)}
+                      disabled={busy}
+                    >
+                      <UsersRound className="h-3.5 w-3.5" />
+                      Teams
+                    </button>
 
                     {isAdmin ? (
                       <button
@@ -298,7 +333,105 @@ export function UsersPage() {
           }}
         />
       )}
+
+      {teamsEditing && (
+        <TeamsEditorModal
+          user={teamsEditing}
+          allTeams={teams}
+          onClose={() => setTeamsEditing(null)}
+          onSave={async (next) => {
+            try {
+              await setUserTeams(teamsEditing.id, next);
+              setTeamsEditing(null);
+            } catch (err) {
+              setError((err as Error).message);
+            }
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+interface TeamsEditorModalProps {
+  user: UserRecord;
+  allTeams: { id: string; name: string; color?: string }[];
+  onClose: () => void;
+  onSave: (teamIds: string[]) => Promise<void> | void;
+}
+
+function TeamsEditorModal({ user, allTeams, onClose, onSave }: TeamsEditorModalProps) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(user.teamIds ?? []));
+  const [submitting, setSubmitting] = useState(false);
+
+  function toggle(id: string) {
+    // General is always included — surface it as disabled below.
+    if (id === GENERAL_TEAM_ID) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function handleSave() {
+    setSubmitting(true);
+    const teamIds = Array.from(selected);
+    if (!teamIds.includes(GENERAL_TEAM_ID)) teamIds.push(GENERAL_TEAM_ID);
+    try {
+      await onSave(teamIds);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Teams for ${user.email}`}
+      description="The General team is always included."
+      footer={
+        <>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={submitting}>
+            {submitting ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
+      <ul className="space-y-1">
+        {allTeams.map((team) => {
+          const isGeneral = team.id === GENERAL_TEAM_ID;
+          const checked = isGeneral || selected.has(team.id);
+          return (
+            <li key={team.id}>
+              <label
+                className={cn(
+                  "flex items-center gap-3 rounded-lg px-3 py-2 ring-1 ring-surface-200 dark:ring-surface-700",
+                  isGeneral && "opacity-70 cursor-default",
+                  !isGeneral && "cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={isGeneral}
+                  onChange={() => toggle(team.id)}
+                />
+                <span className="text-sm font-medium text-surface-900 dark:text-surface-50">{team.name}</span>
+                {isGeneral && (
+                  <span className="ml-auto text-[10px] uppercase tracking-wider text-surface-400">Default</span>
+                )}
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+    </Modal>
   );
 }
 

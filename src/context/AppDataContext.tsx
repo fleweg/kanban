@@ -1,23 +1,74 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTickets } from "../hooks/useTickets";
 import { useSprints } from "../hooks/useSprints";
 import { useWorkflow } from "../hooks/useWorkflow";
 import { useUsers } from "../hooks/useUsers";
+import { useTeams } from "../hooks/useTeams";
+import { useAuth } from "./AuthContext";
+import { runTeamsBootMigration } from "../services/teams";
 import { EPIC_TYPE } from "../lib/issueTypes";
-import type { Sprint, Ticket, UserRecord, Workflow } from "../types";
+import { GENERAL_TEAM_ID } from "../lib/teams";
+import type { Sprint, Team, Ticket, UserRecord, Workflow } from "../types";
+
+const CURRENT_TEAM_STORAGE_KEY = "kanbanCurrentTeam";
+
+function readPersistedTeamId(): string {
+  if (typeof window === "undefined") return GENERAL_TEAM_ID;
+  try {
+    return window.localStorage.getItem(CURRENT_TEAM_STORAGE_KEY) ?? GENERAL_TEAM_ID;
+  } catch {
+    return GENERAL_TEAM_ID;
+  }
+}
+
+function persistTeamId(id: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CURRENT_TEAM_STORAGE_KEY, id);
+  } catch {
+    // ignore (private mode, quota, etc.)
+  }
+}
 
 interface AppDataValue {
   tickets: Ticket[];
   sprints: Sprint[];
+  // Global active-sprint list (every team's active sprint).
+  activeSprints: Sprint[];
+  // Alias to currentTeamActiveSprint for backward compatibility with
+  // pages/components written before the teams feature. Prefer
+  // currentTeamActiveSprint in new code.
   activeSprint: Sprint | null;
   completedSprints: Sprint[];
   workflow: Workflow;
   users: UserRecord[];
+  teams: Team[];
   epics: Ticket[];
   getUserById: (uid: string | null | undefined) => UserRecord | null;
   getEpicById: (id: string | null | undefined) => Ticket | null;
+  getTeamById: (id: string | null | undefined) => Team | null;
   loading: boolean;
   error: Error | null;
+
+  // Current-team scoped slices. The "current team" is persisted in
+  // localStorage and changed via setCurrentTeamId from the TeamSwitcher.
+  currentTeamId: string;
+  setCurrentTeamId: (id: string) => void;
+  myTeams: Team[];
+  currentTeam: Team | null;
+  currentTeamTickets: Ticket[];
+  currentTeamEpics: Ticket[];
+  currentTeamSprints: Sprint[];
+  currentTeamActiveSprint: Sprint | null;
+  currentTeamCompletedSprints: Sprint[];
   backlogTickets: Ticket[];
   activeSprintTickets: Ticket[];
 }
@@ -26,9 +77,20 @@ const AppDataContext = createContext<AppDataValue | null>(null);
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
   const { tickets, loading: ticketsLoading, error: ticketsError } = useTickets();
-  const { sprints, activeSprint, completedSprints, loading: sprintsLoading, error: sprintsError } = useSprints();
+  const { sprints, loading: sprintsLoading, error: sprintsError } = useSprints();
   const { workflow, loading: workflowLoading, error: workflowError } = useWorkflow();
   const { users, loading: usersLoading, error: usersError } = useUsers();
+  const { teams, loading: teamsLoading, error: teamsError } = useTeams();
+  const { record, isAdmin } = useAuth();
+
+  // Fire the one-shot boot migration (Firebase only; SQLite handled it
+  // in ensureSchema). Guarded internally by a Firestore flag doc.
+  useEffect(() => {
+    runTeamsBootMigration().catch((err) =>
+      // eslint-disable-next-line no-console
+      console.warn("Teams boot migration failed (will retry next boot):", err),
+    );
+  }, []);
 
   const usersById = useMemo(() => {
     const map = new Map<string, UserRecord>();
@@ -41,8 +103,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [usersById],
   );
 
-  // Split tickets into epics and "regular" issues. Epics are project-level
-  // containers and never appear on the board / backlog list.
+  const teamsById = useMemo(() => {
+    const map = new Map<string, Team>();
+    for (const t of teams) map.set(t.id, t);
+    return map;
+  }, [teams]);
+
+  const getTeamById = useCallback(
+    (id: string | null | undefined): Team | null => (id ? teamsById.get(id) ?? null : null),
+    [teamsById],
+  );
+
   const { epics, nonEpicTickets, epicsById } = useMemo(() => {
     const eps: Ticket[] = [];
     const others: Ticket[] = [];
@@ -60,44 +131,152 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     [epicsById],
   );
 
+  // Admin sees every team; regular users see only the teams they
+  // belong to. We always include general as a safety net so the
+  // switcher is never empty.
+  const myTeams = useMemo(() => {
+    if (isAdmin) return teams;
+    const membership = new Set<string>(record?.teamIds ?? []);
+    membership.add(GENERAL_TEAM_ID);
+    return teams.filter((t) => membership.has(t.id));
+  }, [teams, isAdmin, record]);
+
+  const [currentTeamId, setCurrentTeamIdState] = useState<string>(readPersistedTeamId);
+
+  // If the persisted team is one the user doesn't have access to (e.g.
+  // they were removed), fall back to the first available team.
+  useEffect(() => {
+    if (myTeams.length === 0) return;
+    if (!myTeams.some((t) => t.id === currentTeamId)) {
+      const fallback = myTeams.find((t) => t.id === GENERAL_TEAM_ID) ?? myTeams[0];
+      setCurrentTeamIdState(fallback.id);
+      persistTeamId(fallback.id);
+    }
+  }, [myTeams, currentTeamId]);
+
+  const setCurrentTeamId = useCallback((id: string) => {
+    setCurrentTeamIdState(id);
+    persistTeamId(id);
+  }, []);
+
+  const activeSprints = useMemo(
+    () => sprints.filter((s) => s.status === "active"),
+    [sprints],
+  );
+  const completedSprints = useMemo(
+    () => sprints.filter((s) => s.status === "completed"),
+    [sprints],
+  );
+
+  const currentTeam = useMemo(() => teamsById.get(currentTeamId) ?? null, [teamsById, currentTeamId]);
+  const currentTeamTickets = useMemo(
+    () => tickets.filter((t) => t.teamId === currentTeamId),
+    [tickets, currentTeamId],
+  );
+  const currentTeamEpics = useMemo(
+    () => epics.filter((t) => t.teamId === currentTeamId),
+    [epics, currentTeamId],
+  );
+  const currentTeamSprints = useMemo(
+    () => sprints.filter((s) => s.teamId === currentTeamId),
+    [sprints, currentTeamId],
+  );
+  const currentTeamActiveSprint = useMemo(
+    () => currentTeamSprints.find((s) => s.status === "active") ?? null,
+    [currentTeamSprints],
+  );
+  const currentTeamCompletedSprints = useMemo(
+    () => currentTeamSprints.filter((s) => s.status === "completed"),
+    [currentTeamSprints],
+  );
+
+  const currentTeamNonEpics = useMemo(
+    () => nonEpicTickets.filter((t) => t.teamId === currentTeamId),
+    [nonEpicTickets, currentTeamId],
+  );
+  const backlogTickets = useMemo(
+    () => currentTeamNonEpics.filter((t) => !t.sprintId),
+    [currentTeamNonEpics],
+  );
+  const activeSprintTickets = useMemo(
+    () =>
+      currentTeamActiveSprint
+        ? currentTeamNonEpics.filter((t) => t.sprintId === currentTeamActiveSprint.id)
+        : [],
+    [currentTeamNonEpics, currentTeamActiveSprint],
+  );
+
   const value = useMemo<AppDataValue>(
     () => ({
       tickets,
       sprints,
-      activeSprint,
+      activeSprints,
+      activeSprint: currentTeamActiveSprint,
       completedSprints,
       workflow,
       users,
+      teams,
       epics,
       getUserById,
       getEpicById,
-      loading: ticketsLoading || sprintsLoading || workflowLoading || usersLoading,
-      error: ticketsError || sprintsError || workflowError || usersError,
-      // Backlog and active-sprint lists exclude epics.
-      backlogTickets: nonEpicTickets.filter((t) => !t.sprintId),
-      activeSprintTickets: activeSprint
-        ? nonEpicTickets.filter((t) => t.sprintId === activeSprint.id)
-        : [],
+      getTeamById,
+      loading:
+        ticketsLoading ||
+        sprintsLoading ||
+        workflowLoading ||
+        usersLoading ||
+        teamsLoading,
+      error:
+        ticketsError ||
+        sprintsError ||
+        workflowError ||
+        usersError ||
+        teamsError,
+      currentTeamId,
+      setCurrentTeamId,
+      myTeams,
+      currentTeam,
+      currentTeamTickets,
+      currentTeamEpics,
+      currentTeamSprints,
+      currentTeamActiveSprint,
+      currentTeamCompletedSprints,
+      backlogTickets,
+      activeSprintTickets,
     }),
     [
       tickets,
       sprints,
-      activeSprint,
+      activeSprints,
       completedSprints,
       workflow,
       users,
+      teams,
       epics,
-      nonEpicTickets,
       getUserById,
       getEpicById,
+      getTeamById,
       ticketsLoading,
       sprintsLoading,
       workflowLoading,
       usersLoading,
+      teamsLoading,
       ticketsError,
       sprintsError,
       workflowError,
       usersError,
+      teamsError,
+      currentTeamId,
+      setCurrentTeamId,
+      myTeams,
+      currentTeam,
+      currentTeamTickets,
+      currentTeamEpics,
+      currentTeamSprints,
+      currentTeamActiveSprint,
+      currentTeamCompletedSprints,
+      backlogTickets,
+      activeSprintTickets,
     ],
   );
 

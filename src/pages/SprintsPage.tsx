@@ -15,21 +15,27 @@ interface SprintStats {
 }
 
 export function SprintsPage() {
-  const { sprints, tickets, activeSprint, workflow, loading } = useAppData();
+  const {
+    currentTeamSprints,
+    currentTeamTickets,
+    activeSprint,
+    workflow,
+    loading,
+  } = useAppData();
   const [opening, setOpening] = useState(false);
   const [detailSprint, setDetailSprint] = useState<Sprint | null>(null);
   const [detailTicket, setDetailTicket] = useState<Ticket | null>(null);
 
   const ticketStatsBySprint = useMemo(() => {
     const map: Record<string, SprintStats> = {};
-    for (const t of tickets) {
+    for (const t of currentTeamTickets) {
       if (!t.sprintId) continue;
       if (!map[t.sprintId]) map[t.sprintId] = { total: 0, completed: 0 };
       map[t.sprintId].total += 1;
       if (t.status === workflow?.completedColumnId) map[t.sprintId].completed += 1;
     }
     return map;
-  }, [tickets, workflow]);
+  }, [currentTeamTickets, workflow]);
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
@@ -52,7 +58,7 @@ export function SprintsPage() {
 
       {loading ? (
         <p className="text-sm text-surface-500 dark:text-surface-400">Loading…</p>
-      ) : sprints.length === 0 ? (
+      ) : currentTeamSprints.length === 0 ? (
         <EmptyState
           icon={Layers}
           title="No sprints yet"
@@ -66,7 +72,7 @@ export function SprintsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {sprints.map((sprint) => {
+          {currentTeamSprints.map((sprint) => {
             const stats: SprintStats = ticketStatsBySprint[sprint.id] ?? { total: 0, completed: 0 };
             return (
               <SprintCard

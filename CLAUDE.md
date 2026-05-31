@@ -144,9 +144,23 @@ All reads are real-time `onSnapshot` subscriptions in `src/services/{tickets,spr
 
 Mutations are plain async functions exported from the same service files (e.g. `createTicket`, `endSprintAndStartNext`). They use `serverTimestamp()` and `writeBatch` where atomicity matters. Components await these directly — there is no global mutation/dispatch layer.
 
+### Teams (project-level partition)
+
+Tickets, sprints, and users carry a `teamId` / `teamIds` field; teams partition the kanban into independent backlogs + sprint timelines. The default team `id: "general"` is **non-deletable** and acts as the lazy-fallback for any legacy doc/row without a teamId. See [src/lib/teams.ts](src/lib/teams.ts) for `GENERAL_TEAM_ID`, the fixed 8-color palette, and chip helpers.
+
+- **Model**: `Ticket.teamId: string`, `Sprint.teamId: string`, `UserRecord.teamIds: string[]`. New `Team { id, name, color, createdAt }` in [src/types.ts](src/types.ts).
+- **Storage**: Firebase mode adds a `teams/` collection + `teamIds` array on `users/`; SQLite mode adds `teams` and `team_members` tables plus `team_id` columns on `tickets`/`sprints` (see [src/services/flexweg-sqlite/schema.ts](src/services/flexweg-sqlite/schema.ts)).
+- **Boot migration**: a one-shot backfill assigns `general` to every legacy ticket/sprint and enrolls every user in `general`. Idempotent via `config/migrations.teamBackfillAt` (Firebase) or `config["team_backfill_done_at"]` (SQLite). Runs from `AppDataProvider` on mount.
+- **Current team** lives in `AppDataContext` (`currentTeamId`, `setCurrentTeamId`, persisted in `localStorage.kanbanCurrentTeam`). The Topbar/Sidebar `TeamSwitcher` is the only writer. All page-level data uses `currentTeam*` slices (`currentTeamTickets`, `currentTeamSprints`, …) so swapping team filters the whole UI without touching the underlying lists.
+- **Sprint constraint becomes per-team**: `createSprint` precheck is `where("status","==","active").where("teamId","==",X)`. `endSprintAndStartNext` accepts a `teamId` so the next sprint stays in the same team.
+- **Moving a ticket between teams** clears its `sprintId` + `status` in the same write (`moveTicketToTeam` in tickets.ts) — sprints are team-scoped, so the ticket must rejoin its destination team's backlog. The TicketModal asks for confirmation when the ticket was in an active sprint.
+- **Membership UI**: admin-only edit on [src/pages/UsersPage.tsx](src/pages/UsersPage.tsx) via the per-row "Teams" button. Memberships always include `general` (enforced client-side in `setUserTeams`). Non-admins see the team chips but no edit button.
+- **Teams page** at `/teams` — read-only for everyone, admin-only edits. Deleting a non-empty team falls back to `general` with a confirmation dialog showing impact counts (`countTeamImpact`).
+- **Backward-compat alias**: `useAppData().activeSprint` aliases `currentTeamActiveSprint` so existing pages keep working. Use the explicit `currentTeam*` slices in new code.
+
 ### Sprint lifecycle (the non-obvious part)
 
-Only one sprint can be `status: "active"` at a time. `createSprint` and `endSprintAndStartNext` enforce this with a `where("status", "==", "active")` precheck. Two end-of-sprint paths exist in [src/services/sprints.ts](src/services/sprints.ts):
+Only one sprint can be `status: "active"` at a time **per team**. `createSprint` and `endSprintAndStartNext` enforce this with a `where("status","==","active").where("teamId","==",X)` precheck. Two end-of-sprint paths exist in [src/services/sprints.ts](src/services/sprints.ts):
 
 - `endSprintAndStartNext` — creates the next sprint, then in a single batch reassigns every ticket whose `status !== completedColumnId` to the new sprint (keeping its column status) and marks the old sprint completed. Tickets in the completion column stay archived in the ended sprint.
 - `endSprintToBacklog` — same filter, but unfinished tickets get `sprintId: null, status: null` instead.

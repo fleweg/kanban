@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(command -v firebase)",
+      "Bash(firebase projects:list)",
+      "Bash(command -v gcloud)",
+      "Bash(gcloud config *)",
+      "Bash(gcloud auth *)"
+    ]
+  }
+}

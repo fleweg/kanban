@@ -4,6 +4,7 @@
 import { Timestamp } from "firebase/firestore";
 import { sqlBatch, sqlExec, sqlQuery } from "./client";
 import { notifyPotentialChange, subscribeWithPolling } from "./subscriptions";
+import { GENERAL_TEAM_ID } from "../../lib/teams";
 import type { Sprint, SprintStatus } from "../../types";
 
 export const SPRINT_STATUS: { active: SprintStatus; completed: SprintStatus } = {
@@ -16,6 +17,7 @@ interface SprintRow {
   name: string;
   goal: string;
   status: string;
+  team_id: string | null;
   created_at: number;
   started_at: number | null;
   ended_at: number | null;
@@ -27,6 +29,7 @@ function rowToSprint(r: SprintRow): Sprint {
     name: r.name,
     goal: r.goal ?? "",
     status: r.status as SprintStatus,
+    teamId: r.team_id ?? GENERAL_TEAM_ID,
     createdAt: Timestamp.fromMillis(r.created_at),
     startedAt: r.started_at ? Timestamp.fromMillis(r.started_at) : undefined,
     endedAt: r.ended_at ? Timestamp.fromMillis(r.ended_at) : null,
@@ -53,24 +56,28 @@ export function subscribeToSprints(
   return subscribeWithPolling(fetchAllSprints, onChange, onError);
 }
 
-export async function createSprint({ name, goal = "" }: { name: string; goal?: string }): Promise<{ id: string }> {
-  // Guard rail: only one active sprint at a time. Done as a check
+export async function createSprint({
+  name,
+  goal = "",
+  teamId = GENERAL_TEAM_ID,
+}: { name: string; goal?: string; teamId?: string }): Promise<{ id: string }> {
+  // Guard rail: only one active sprint per team. Done as a check
   // before the insert — not atomic, but the cost of two concurrent
   // creations is two active sprints (recoverable from the UI), and
   // the alternative (full transaction) doesn't add real safety here.
   const active = await sqlQuery<{ id: string }>(
-    "SELECT id FROM sprints WHERE status = ? LIMIT 1",
-    [SPRINT_STATUS.active],
+    "SELECT id FROM sprints WHERE status = ? AND team_id = ? LIMIT 1",
+    [SPRINT_STATUS.active, teamId],
   );
   if (active.rows.length > 0) {
-    throw new Error("An active sprint already exists. End it before starting a new one.");
+    throw new Error("An active sprint already exists for this team. End it before starting a new one.");
   }
   const id = genId();
   const now = Date.now();
   await sqlExec(
-    `INSERT INTO sprints (id, name, goal, status, created_at, started_at, ended_at)
-     VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-    [id, name.trim(), goal.trim(), SPRINT_STATUS.active, now, now],
+    `INSERT INTO sprints (id, name, goal, status, team_id, created_at, started_at, ended_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+    [id, name.trim(), goal.trim(), SPRINT_STATUS.active, teamId, now, now],
   );
   notifyPotentialChange();
   return { id };
@@ -114,11 +121,13 @@ export async function endSprintAndStartNext({
   nextSprintName,
   nextSprintGoal = "",
   completedColumnId,
+  teamId = GENERAL_TEAM_ID,
 }: {
   activeSprintId: string;
   nextSprintName: string;
   nextSprintGoal?: string;
   completedColumnId: string;
+  teamId?: string;
 }): Promise<string> {
   if (!activeSprintId) throw new Error("No active sprint to end.");
   if (!nextSprintName?.trim()) throw new Error("A name for the next sprint is required.");
@@ -128,9 +137,9 @@ export async function endSprintAndStartNext({
   await sqlBatch([
     // Create the next sprint.
     {
-      sql: `INSERT INTO sprints (id, name, goal, status, created_at, started_at, ended_at)
-            VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-      params: [nextId, nextSprintName.trim(), nextSprintGoal.trim(), SPRINT_STATUS.active, now, now],
+      sql: `INSERT INTO sprints (id, name, goal, status, team_id, created_at, started_at, ended_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
+      params: [nextId, nextSprintName.trim(), nextSprintGoal.trim(), SPRINT_STATUS.active, teamId, now, now],
     },
     // Migrate non-completed tickets to the new sprint.
     {

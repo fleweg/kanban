@@ -15,7 +15,7 @@ interface EpicStats {
 }
 
 export function EpicsPage() {
-  const { epics, tickets, workflow, getUserById, loading } = useAppData();
+  const { currentTeamEpics, currentTeamTickets, workflow, getUserById, loading } = useAppData();
   const [editing, setEditing] = useState<Ticket | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -24,14 +24,14 @@ export function EpicsPage() {
   // matches the workflow's completion column.
   const stats = useMemo(() => {
     const map: Record<string, EpicStats> = {};
-    for (const t of tickets) {
+    for (const t of currentTeamTickets) {
       if (!t.epicId || t.type === EPIC_TYPE) continue;
       if (!map[t.epicId]) map[t.epicId] = { total: 0, completed: 0 };
       map[t.epicId].total += 1;
       if (t.status && t.status === workflow?.completedColumnId) map[t.epicId].completed += 1;
     }
     return map;
-  }, [tickets, workflow]);
+  }, [currentTeamTickets, workflow]);
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
@@ -48,7 +48,7 @@ export function EpicsPage() {
 
       {loading ? (
         <p className="text-sm text-surface-500 dark:text-surface-400">Loading…</p>
-      ) : epics.length === 0 ? (
+      ) : currentTeamEpics.length === 0 ? (
         <EmptyState
           icon={Crown}
           title="No epics yet"
@@ -62,7 +62,7 @@ export function EpicsPage() {
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {epics.map((epic) => {
+          {currentTeamEpics.map((epic) => {
             const s: EpicStats = stats[epic.id] ?? { total: 0, completed: 0 };
             const pct = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
             const assignee = getUserById(epic.assigneeId);

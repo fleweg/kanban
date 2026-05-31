@@ -12,6 +12,7 @@ import { sqlBatch, sqlExec, sqlQuery } from "./client";
 import { notifyPotentialChange, subscribeWithPolling } from "./subscriptions";
 import { deleteAllAttachmentsForTicket } from "./attachments";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
+import { GENERAL_TEAM_ID } from "../../lib/teams";
 import type { Attachment, ChecklistItem, IssueType, Priority, Ticket } from "../../types";
 
 interface TicketRow {
@@ -23,6 +24,7 @@ interface TicketRow {
   sprint_id: string | null;
   status: string | null;
   epic_id: string | null;
+  team_id: string | null;
   created_by: string | null;
   assignee_id: string | null;
   order: number | null;
@@ -53,6 +55,7 @@ function rowToTicket(r: TicketRow): Ticket {
     sprintId: r.sprint_id,
     status: r.status,
     epicId: r.epic_id,
+    teamId: r.team_id ?? GENERAL_TEAM_ID,
     createdBy: r.created_by,
     assigneeId: r.assignee_id,
     order: r.order ?? undefined,
@@ -96,6 +99,7 @@ export interface CreateTicketInput {
   assigneeId?: string | null;
   type?: IssueType;
   epicId?: string | null;
+  teamId?: string;
 }
 
 export async function createTicket({
@@ -108,6 +112,7 @@ export async function createTicket({
   assigneeId = null,
   type = DEFAULT_ISSUE_TYPE,
   epicId = null,
+  teamId = GENERAL_TEAM_ID,
 }: CreateTicketInput): Promise<{ id: string }> {
   const isEpicType = type === EPIC_TYPE;
   const id = genId();
@@ -115,10 +120,10 @@ export async function createTicket({
   await sqlExec(
     `INSERT INTO tickets (
       id, title, description, priority, type,
-      sprint_id, status, epic_id,
+      sprint_id, status, epic_id, team_id,
       created_by, assignee_id, "order",
       comment_count, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     [
       id,
       title.trim(),
@@ -128,6 +133,7 @@ export async function createTicket({
       isEpicType ? null : sprintId,
       isEpicType ? null : status,
       isEpicType ? null : epicId,
+      teamId,
       createdBy,
       assigneeId,
       now, // order
@@ -221,6 +227,17 @@ export async function moveTicketToBacklog(id: string): Promise<void> {
   await sqlExec(
     "UPDATE tickets SET sprint_id = NULL, status = NULL, updated_at = ? WHERE id = ?",
     [Date.now(), id],
+  );
+  notifyPotentialChange();
+}
+
+// Move a ticket to a different team. Sprints are team-scoped, so any
+// sprint assignment is dropped — the ticket lands in the destination
+// team's backlog.
+export async function moveTicketToTeam(id: string, teamId: string): Promise<void> {
+  await sqlExec(
+    "UPDATE tickets SET team_id = ?, sprint_id = NULL, status = NULL, updated_at = ? WHERE id = ?",
+    [teamId, Date.now(), id],
   );
   notifyPotentialChange();
 }

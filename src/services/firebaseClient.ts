@@ -88,9 +88,11 @@ export const collections = {
   sprints: "sprints",
   config: "config",
   users: "users",
+  teams: "teams",
 } as const;
 
 export const configDocs = {
   workflow: "workflow",
   flexweg: "flexweg",
+  migrations: "migrations",
 } as const;

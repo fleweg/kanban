@@ -1,9 +1,10 @@
 import { NavLink } from "react-router-dom";
-import { Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, type LucideIcon } from "lucide-react";
+import { Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { signOut } from "../../services/auth";
+import { TeamSwitcher } from "../teams/TeamSwitcher";
 
 interface NavItem {
   to: string;
@@ -16,6 +17,7 @@ const baseItems: NavItem[] = [
   { to: "/sprint", label: "Sprint", icon: LayoutGrid },
   { to: "/sprints", label: "Sprints", icon: Layers },
   { to: "/epics", label: "Epics", icon: Crown },
+  { to: "/teams", label: "Teams", icon: UsersRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -35,6 +37,7 @@ export function Topbar() {
           <p className="text-sm font-semibold truncate">Kanban</p>
         </div>
         <div className="flex items-center gap-1">
+          <TeamSwitcher compact className="mr-1" />
           {user && (
             <span className="text-xs text-surface-500 truncate max-w-[120px] dark:text-surface-400">
               {user.email}

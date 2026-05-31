@@ -3,7 +3,7 @@ import { Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { RichTextEditor } from "../ui/RichTextEditor";
 import { checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
-import { createTicket, deleteTicket, updateTicket } from "../../services/tickets";
+import { createTicket, deleteTicket, moveTicketToTeam, updateTicket } from "../../services/tickets";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
 import { UserAvatar } from "../users/UserAvatar";
@@ -15,7 +15,8 @@ import { EpicPicker } from "../epics/EpicPicker";
 import { Checklist } from "./Checklist";
 import { Attachments } from "./Attachments";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
-import type { IssueType, Priority, Ticket, UserRecord, Workflow } from "../../types";
+import { GENERAL_TEAM_ID } from "../../lib/teams";
+import type { IssueType, Priority, Team, Ticket, UserRecord, Workflow } from "../../types";
 
 type TabId = "details" | "properties" | "checklist" | "attachments" | "comments";
 
@@ -27,6 +28,7 @@ interface TicketFormState {
   type: IssueType;
   epicId: string | null;
   status: string | null;
+  teamId: string;
 }
 
 const blank: TicketFormState = {
@@ -37,6 +39,7 @@ const blank: TicketFormState = {
   type: DEFAULT_ISSUE_TYPE,
   epicId: null,
   status: null,
+  teamId: GENERAL_TEAM_ID,
 };
 
 interface TicketModalProps {
@@ -59,7 +62,7 @@ export function TicketModal({
   workflow,
 }: TicketModalProps) {
   const { user } = useAuth();
-  const { tickets, getUserById } = useAppData();
+  const { tickets, getUserById, teams, currentTeamId } = useAppData();
   const isEdit = Boolean(ticket?.id);
   const [form, setForm] = useState<TicketFormState>(blank);
   const [submitting, setSubmitting] = useState(false);
@@ -77,13 +80,19 @@ export function TicketModal({
         assigneeId: ticket.assigneeId ?? null,
         type: ticket.type ?? DEFAULT_ISSUE_TYPE,
         epicId: ticket.epicId ?? null,
+        teamId: ticket.teamId ?? GENERAL_TEAM_ID,
       });
     } else {
-      setForm({ ...blank, type: defaultType, status: defaultStatus });
+      setForm({
+        ...blank,
+        type: defaultType,
+        status: defaultStatus,
+        teamId: currentTeamId,
+      });
     }
     setError(null);
     setActiveTab("details");
-  }, [open, ticket, defaultStatus, defaultType]);
+  }, [open, ticket, defaultStatus, defaultType, currentTeamId]);
 
   const isEpicForm = form.type === EPIC_TYPE;
 
@@ -106,11 +115,28 @@ export function TicketModal({
     setError(null);
     try {
       if (isEdit && ticket) {
+        // Team change is destructive — sprints are team-scoped, so we
+        // drop sprintId/status when re-homing the ticket. Warn the user
+        // when they're losing an active-sprint slot.
+        const teamChanged = form.teamId !== ticket.teamId;
+        if (teamChanged && ticket.sprintId) {
+          const confirmMsg =
+            "Moving this ticket to another team will remove it from its current sprint. Continue?";
+          if (!window.confirm(confirmMsg)) {
+            setSubmitting(false);
+            return;
+          }
+        }
+        if (teamChanged) {
+          await moveTicketToTeam(ticket.id, form.teamId);
+        }
         await updateTicket(ticket.id, {
           title: form.title,
           description: form.description,
           priority: form.priority,
-          status: isEpicForm ? null : form.status ?? null,
+          // moveTicketToTeam already nulls status; skip status here when
+          // we just changed team to avoid clobbering the null write.
+          status: teamChanged ? null : isEpicForm ? null : form.status ?? null,
           assigneeId: form.assigneeId ?? null,
           type: form.type,
           epicId: isEpicForm ? null : form.epicId ?? null,
@@ -130,6 +156,7 @@ export function TicketModal({
           assigneeId: form.assigneeId ?? null,
           type: form.type,
           epicId: isEpicForm ? null : form.epicId ?? null,
+          teamId: form.teamId,
         });
       }
       onClose();
@@ -239,6 +266,7 @@ export function TicketModal({
             isEpicForm={isEpicForm}
             showStatusField={showStatusField}
             workflow={workflow}
+            teams={teams}
           />
         </div>
 
@@ -366,9 +394,10 @@ interface PropertiesPaneProps {
   isEpicForm: boolean;
   showStatusField: boolean;
   workflow?: Workflow;
+  teams: Team[];
 }
 
-function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow }: PropertiesPaneProps) {
+function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow, teams }: PropertiesPaneProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
@@ -404,6 +433,24 @@ function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow }
           value={form.assigneeId}
           onChange={(v) => setForm((f) => ({ ...f, assigneeId: v }))}
         />
+      </div>
+
+      <div>
+        <label className="label" htmlFor="ticket-team">
+          Team
+        </label>
+        <select
+          id="ticket-team"
+          className="input"
+          value={form.teamId}
+          onChange={(e) => setForm((f) => ({ ...f, teamId: e.target.value }))}
+        >
+          {teams.map((tm) => (
+            <option key={tm.id} value={tm.id}>
+              {tm.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {!isEpicForm && (

@@ -13,6 +13,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { collections, getDb } from "../firebaseClient";
+import { GENERAL_TEAM_ID } from "../../lib/teams";
 import type { Sprint, SprintStatus } from "../../types";
 
 const sprintsCollection = () => collection(getDb(), collections.sprints);
@@ -32,24 +33,39 @@ export function subscribeToSprints(
   return onSnapshot(
     q,
     (snap) => {
-      const sprints = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Sprint);
+      const sprints = snap.docs.map((d) => {
+        const data = d.data();
+        // Legacy fallback for pre-teams docs.
+        return { id: d.id, teamId: GENERAL_TEAM_ID, ...data } as Sprint;
+      });
       onChange(sprints);
     },
     onError,
   );
 }
 
-export async function createSprint({ name, goal = "" }: { name: string; goal?: string }) {
-  // Guard rail: only one active sprint at a time.
-  const activeSnap = await getDocs(query(sprintsCollection(), where("status", "==", SPRINT_STATUS.active)));
+export async function createSprint({
+  name,
+  goal = "",
+  teamId = GENERAL_TEAM_ID,
+}: { name: string; goal?: string; teamId?: string }) {
+  // Guard rail: only one active sprint per team.
+  const activeSnap = await getDocs(
+    query(
+      sprintsCollection(),
+      where("status", "==", SPRINT_STATUS.active),
+      where("teamId", "==", teamId),
+    ),
+  );
   if (!activeSnap.empty) {
-    throw new Error("An active sprint already exists. End it before starting a new one.");
+    throw new Error("An active sprint already exists for this team. End it before starting a new one.");
   }
 
   return addDoc(sprintsCollection(), {
     name: name.trim(),
     goal: goal.trim(),
     status: SPRINT_STATUS.active,
+    teamId,
     createdAt: serverTimestamp(),
     startedAt: serverTimestamp(),
     endedAt: null,
@@ -73,11 +89,13 @@ export async function endSprintAndStartNext({
   nextSprintName,
   nextSprintGoal = "",
   completedColumnId,
+  teamId = GENERAL_TEAM_ID,
 }: {
   activeSprintId: string;
   nextSprintName: string;
   nextSprintGoal?: string;
   completedColumnId: string;
+  teamId?: string;
 }): Promise<string> {
   if (!activeSprintId) throw new Error("No active sprint to end.");
   if (!nextSprintName?.trim()) throw new Error("A name for the next sprint is required.");
@@ -89,6 +107,7 @@ export async function endSprintAndStartNext({
     name: nextSprintName.trim(),
     goal: nextSprintGoal.trim(),
     status: SPRINT_STATUS.active,
+    teamId,
     createdAt: serverTimestamp(),
     startedAt: serverTimestamp(),
     endedAt: null,

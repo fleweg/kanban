@@ -20,7 +20,7 @@
 
 import { Timestamp } from "firebase/firestore";
 import type { User as FirebaseUser } from "firebase/auth";
-import { sqlExec, sqlQuery } from "./client";
+import { sqlBatch, sqlExec, sqlQuery } from "./client";
 import { notifyPotentialChange, subscribeWithPolling } from "./subscriptions";
 import {
   deleteUser as apiDeleteUser,
@@ -28,6 +28,7 @@ import {
   listUsers as apiListUsers,
   updateUser as apiUpdateUser,
 } from "./userAuth";
+import { GENERAL_TEAM_ID } from "../../lib/teams";
 import type { UserRecord, UserRole } from "../../types";
 
 export const USER_ROLES: { admin: UserRole; user: UserRole } = {
@@ -44,15 +45,38 @@ interface UserRow {
   created_by: string | null;
 }
 
-function rowToUser(r: UserRow): UserRecord {
+function rowToUser(r: UserRow, teamIds: string[]): UserRecord {
   return {
     id: r.uid,
     email: r.email,
     role: r.role as UserRole,
     disabled: !!r.disabled,
+    teamIds: teamIds.length > 0 ? teamIds : [GENERAL_TEAM_ID],
     createdAt: Timestamp.fromMillis(r.created_at),
     createdBy: r.created_by ?? undefined,
   };
+}
+
+async function fetchTeamMembershipsByUid(): Promise<Map<string, string[]>> {
+  const { rows } = await sqlQuery<{ team_id: string; uid: string }>(
+    "SELECT team_id, uid FROM team_members",
+    [],
+  );
+  const map = new Map<string, string[]>();
+  for (const r of rows) {
+    const arr = map.get(r.uid) ?? [];
+    arr.push(r.team_id);
+    map.set(r.uid, arr);
+  }
+  return map;
+}
+
+async function fetchTeamIdsFor(uid: string): Promise<string[]> {
+  const { rows } = await sqlQuery<{ team_id: string }>(
+    "SELECT team_id FROM team_members WHERE uid = ?",
+    [uid],
+  );
+  return rows.map((r) => r.team_id);
 }
 
 export function subscribeToUsers(
@@ -61,11 +85,11 @@ export function subscribeToUsers(
 ): () => void {
   return subscribeWithPolling(
     async () => {
-      const { rows } = await sqlQuery<UserRow>(
-        "SELECT * FROM users ORDER BY email ASC",
-        [],
-      );
-      return rows.map(rowToUser);
+      const [usersRes, byUid] = await Promise.all([
+        sqlQuery<UserRow>("SELECT * FROM users ORDER BY email ASC", []),
+        fetchTeamMembershipsByUid(),
+      ]);
+      return usersRes.rows.map((r) => rowToUser(r, byUid.get(r.uid) ?? []));
     },
     onChange,
     onError,
@@ -77,7 +101,9 @@ export async function getUserRecord(uid: string): Promise<UserRecord | null> {
     "SELECT * FROM users WHERE uid = ?",
     [uid],
   );
-  return rows.length > 0 ? rowToUser(rows[0]) : null;
+  if (rows.length === 0) return null;
+  const teamIds = await fetchTeamIdsFor(uid);
+  return rowToUser(rows[0], teamIds);
 }
 
 // Called by AuthContext on every login. The auth API has already
@@ -108,22 +134,32 @@ export async function ensureSelfUserRecord(authUser: FirebaseUser): Promise<User
 
   const now = Date.now();
   const email = (authUser.email ?? "").toLowerCase();
-  // SQLite >= 3.24 ON CONFLICT — atomic upsert.
-  await sqlExec(
-    `INSERT INTO users (uid, email, role, disabled, created_at, created_by)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(uid) DO UPDATE SET
-       email = excluded.email,
-       role = excluded.role,
-       disabled = excluded.disabled`,
-    [authUser.uid, email, role, disabled ? 1 : 0, now, authUser.uid],
-  );
+  // SQLite >= 3.24 ON CONFLICT — atomic upsert. We also auto-enroll
+  // the user in the general team so they can be picked as an assignee
+  // straight away even before an admin curates their memberships.
+  await sqlBatch([
+    {
+      sql: `INSERT INTO users (uid, email, role, disabled, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(uid) DO UPDATE SET
+          email = excluded.email,
+          role = excluded.role,
+          disabled = excluded.disabled`,
+      params: [authUser.uid, email, role, disabled ? 1 : 0, now, authUser.uid],
+    },
+    {
+      sql: `INSERT OR IGNORE INTO team_members (team_id, uid) VALUES (?, ?)`,
+      params: [GENERAL_TEAM_ID, authUser.uid],
+    },
+  ]);
+  const teamIds = await fetchTeamIdsFor(authUser.uid);
   notifyPotentialChange();
   return {
     id: authUser.uid,
     email,
     role,
     disabled,
+    teamIds,
     createdAt: Timestamp.fromMillis(now),
     createdBy: authUser.uid,
   };
@@ -168,21 +204,46 @@ export async function syncUsersFromApi(): Promise<UserRecord[]> {
   const remote = await apiListUsers();
   const now = Date.now();
   for (const u of remote) {
-    await sqlExec(
-      `INSERT INTO users (uid, email, role, disabled, created_at, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(uid) DO UPDATE SET
-         email = excluded.email,
-         role = excluded.role,
-         disabled = excluded.disabled`,
-      [String(u.id), u.email.toLowerCase(), u.role, u.disabled ? 1 : 0, now, String(u.id)],
-    );
+    await sqlBatch([
+      {
+        sql: `INSERT INTO users (uid, email, role, disabled, created_at, created_by)
+          VALUES (?, ?, ?, ?, ?, ?)
+          ON CONFLICT(uid) DO UPDATE SET
+            email = excluded.email,
+            role = excluded.role,
+            disabled = excluded.disabled`,
+        params: [String(u.id), u.email.toLowerCase(), u.role, u.disabled ? 1 : 0, now, String(u.id)],
+      },
+      {
+        sql: `INSERT OR IGNORE INTO team_members (team_id, uid) VALUES (?, ?)`,
+        params: [GENERAL_TEAM_ID, String(u.id)],
+      },
+    ]);
   }
   notifyPotentialChange();
-  // Read back from the cache so we get the canonical UserRecord shape.
-  const { rows } = await sqlQuery<UserRow>(
-    "SELECT * FROM users ORDER BY email ASC",
-    [],
-  );
-  return rows.map(rowToUser);
+  const [usersRes, byUid] = await Promise.all([
+    sqlQuery<UserRow>("SELECT * FROM users ORDER BY email ASC", []),
+    fetchTeamMembershipsByUid(),
+  ]);
+  return usersRes.rows.map((r) => rowToUser(r, byUid.get(r.uid) ?? []));
+}
+
+// Admin-only: replace the set of teams a user belongs to. Always
+// guarantees the user keeps at least general membership so they
+// remain visible in the assignee picker.
+export async function setUserTeams(uid: string, teamIds: string[]): Promise<void> {
+  const set = new Set<string>(teamIds);
+  set.add(GENERAL_TEAM_ID);
+  const final = Array.from(set);
+  const stmts: Array<{ sql: string; params: unknown[] }> = [
+    { sql: "DELETE FROM team_members WHERE uid = ?", params: [uid] },
+  ];
+  for (const teamId of final) {
+    stmts.push({
+      sql: "INSERT INTO team_members (team_id, uid) VALUES (?, ?)",
+      params: [teamId, uid],
+    });
+  }
+  await sqlBatch(stmts);
+  notifyPotentialChange();
 }

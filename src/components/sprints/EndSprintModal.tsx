@@ -42,6 +42,7 @@ export function EndSprintModal({ open, onClose, activeSprint, workflow, unfinish
           nextSprintName: form.name,
           nextSprintGoal: form.goal,
           completedColumnId: workflow.completedColumnId,
+          teamId: activeSprint.teamId,
         });
       } else {
         await endSprintToBacklog({

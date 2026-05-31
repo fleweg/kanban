@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { collections, getDb } from "../firebaseClient";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
+import { GENERAL_TEAM_ID } from "../../lib/teams";
 import { deleteAllAttachmentsForTicket } from "./attachments";
 import type { Attachment, ChecklistItem, IssueType, Priority, Ticket } from "../../types";
 
@@ -26,7 +27,11 @@ export function subscribeToTickets(
   return onSnapshot(
     q,
     (snap) => {
-      const tickets = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Ticket);
+      const tickets = snap.docs.map((d) => {
+        const data = d.data();
+        // Legacy fallback: pre-teams tickets have no teamId field.
+        return { id: d.id, teamId: GENERAL_TEAM_ID, ...data } as Ticket;
+      });
       onChange(tickets);
     },
     onError,
@@ -43,6 +48,7 @@ export interface CreateTicketInput {
   assigneeId?: string | null;
   type?: IssueType;
   epicId?: string | null;
+  teamId?: string;
 }
 
 export async function createTicket({
@@ -55,6 +61,7 @@ export async function createTicket({
   assigneeId = null,
   type = DEFAULT_ISSUE_TYPE,
   epicId = null,
+  teamId = GENERAL_TEAM_ID,
 }: CreateTicketInput) {
   // Epics are project-level containers — they never live in a sprint or in a
   // workflow column, and they cannot belong to another epic.
@@ -69,6 +76,7 @@ export async function createTicket({
     assigneeId,
     type,
     epicId: isEpicType ? null : epicId,
+    teamId,
     // Initial order = now, so newly created tickets land at the top of their
     // list (descending sort). Drag-reorder writes new midpoint values later.
     order: Date.now(),
@@ -118,6 +126,17 @@ export async function moveTicketToSprint(id: string, sprintId: string, status: s
 
 export async function moveTicketToBacklog(id: string): Promise<void> {
   return updateTicket(id, { sprintId: null, status: null });
+}
+
+// Sprints are team-scoped, so changing team also drops any sprint
+// assignment to keep the ticket coherent with its new home.
+export async function moveTicketToTeam(id: string, teamId: string): Promise<void> {
+  return updateDoc(ticketDoc(id), {
+    teamId,
+    sprintId: null,
+    status: null,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function changeTicketStatus(id: string, status: string): Promise<void> {
