@@ -1,19 +1,21 @@
 import { CheckCircle2, CircleDot } from "lucide-react";
 import { Badge } from "../ui/Badge";
-import { formatDate } from "../../lib/utils";
+import { cn, formatDate } from "../../lib/utils";
 import type { Sprint } from "../../types";
 
 interface SprintCardProps {
   sprint: Sprint;
   ticketCount: number;
   completedCount: number;
+  onClick?: () => void;
 }
 
-export function SprintCard({ sprint, ticketCount, completedCount }: SprintCardProps) {
+export function SprintCard({ sprint, ticketCount, completedCount, onClick }: SprintCardProps) {
   const isActive = sprint.status === "active";
   const Icon = isActive ? CircleDot : CheckCircle2;
-  return (
-    <div className="card p-5 flex flex-col gap-3">
+
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -47,6 +49,23 @@ export function SprintCard({ sprint, ticketCount, completedCount }: SprintCardPr
           </p>
         </div>
       </div>
-    </div>
+    </>
   );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={cn(
+          "card p-5 flex flex-col gap-3 text-left",
+          "cursor-pointer transition-all hover:shadow-card-hover hover:ring-surface-300 dark:hover:ring-surface-600",
+        )}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return <div className="card p-5 flex flex-col gap-3">{body}</div>;
 }

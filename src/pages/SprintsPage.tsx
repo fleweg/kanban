@@ -3,8 +3,11 @@ import { Layers, Plus } from "lucide-react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { SprintCard } from "../components/sprints/SprintCard";
 import { SprintModal } from "../components/sprints/SprintModal";
+import { SprintDetailModal } from "../components/sprints/SprintDetailModal";
+import { TicketModal } from "../components/tickets/TicketModal";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useAppData } from "../context/AppDataContext";
+import type { Sprint, Ticket } from "../types";
 
 interface SprintStats {
   total: number;
@@ -14,6 +17,8 @@ interface SprintStats {
 export function SprintsPage() {
   const { sprints, tickets, activeSprint, workflow, loading } = useAppData();
   const [opening, setOpening] = useState(false);
+  const [detailSprint, setDetailSprint] = useState<Sprint | null>(null);
+  const [detailTicket, setDetailTicket] = useState<Ticket | null>(null);
 
   const ticketStatsBySprint = useMemo(() => {
     const map: Record<string, SprintStats> = {};
@@ -69,6 +74,9 @@ export function SprintsPage() {
                 sprint={sprint}
                 ticketCount={stats.total}
                 completedCount={stats.completed}
+                onClick={
+                  sprint.status === "completed" ? () => setDetailSprint(sprint) : undefined
+                }
               />
             );
           })}
@@ -76,6 +84,18 @@ export function SprintsPage() {
       )}
 
       <SprintModal open={opening} onClose={() => setOpening(false)} />
+      <SprintDetailModal
+        open={Boolean(detailSprint)}
+        sprint={detailSprint}
+        onClose={() => setDetailSprint(null)}
+        onTicketClick={(ticket) => setDetailTicket(ticket)}
+      />
+      <TicketModal
+        open={Boolean(detailTicket)}
+        onClose={() => setDetailTicket(null)}
+        ticket={detailTicket}
+        workflow={workflow}
+      />
     </div>
   );
 }
