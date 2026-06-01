@@ -146,5 +146,8 @@
       "uploadFailed": "config.js를 Flexweg에 업로드할 수 없습니다",
       "generic": "문제가 발생했습니다."
     }
+  },
+  "tickets": {
+    "createdAgo": "{{age}} 생성됨"
   }
 }

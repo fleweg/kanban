@@ -1,11 +1,12 @@
 import { useMemo } from "react";
-import { Inbox } from "lucide-react";
+import { Clock, Inbox } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../ui/Modal";
 import { Badge } from "../ui/Badge";
 import { TypeIcon } from "../issueTypes/TypeIcon";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
 import { useAppData } from "../../context/AppDataContext";
-import { formatDate } from "../../lib/utils";
+import { formatAge, formatAgeCompact, formatDate } from "../../lib/utils";
 import type { Sprint, Ticket } from "../../types";
 
 interface SprintDetailModalProps {
@@ -16,6 +17,7 @@ interface SprintDetailModalProps {
 }
 
 export function SprintDetailModal({ open, sprint, onClose, onTicketClick }: SprintDetailModalProps) {
+  const { t } = useTranslation();
   const { tickets, workflow, getUserById } = useAppData();
 
   const sprintTickets = useMemo(() => {
@@ -76,6 +78,15 @@ export function SprintDetailModal({ open, sprint, onClose, onTicketClick }: Spri
                   >
                     {columnName(ticket.status)}
                   </Badge>
+                  {ticket.createdAt && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] tabular-nums text-surface-500 dark:text-surface-400"
+                      title={t("tickets.createdAgo", { age: formatAge(ticket.createdAt) })}
+                    >
+                      <Clock className="h-3 w-3" />
+                      {formatAgeCompact(ticket.createdAt)}
+                    </span>
+                  )}
                   {assignee ? <UserAvatar user={assignee} size="sm" /> : <UnassignedAvatar size="sm" />}
                 </button>
               </li>
