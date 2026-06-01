@@ -12,6 +12,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { UsersPage } from "./pages/UsersPage";
 import { TeamsPage } from "./pages/TeamsPage";
 import { EpicsPage } from "./pages/EpicsPage";
+import { GanttPage } from "./pages/GanttPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LocalIdentityPage } from "./pages/LocalIdentityPage";
 import { SetupForm } from "./pages/SetupForm";
@@ -92,6 +93,7 @@ function AuthenticatedShell() {
           <Route path="/backlog" element={<BacklogPage />} />
           <Route path="/sprints" element={<SprintsPage />} />
           <Route path="/epics" element={<EpicsPage />} />
+          <Route path="/gantt" element={<GanttPage />} />
           <Route path="/teams" element={<TeamsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route

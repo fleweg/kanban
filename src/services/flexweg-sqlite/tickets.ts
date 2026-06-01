@@ -28,6 +28,10 @@ interface TicketRow {
   created_by: string | null;
   assignee_id: string | null;
   order: number | null;
+  start_date: number | null;
+  due_date: number | null;
+  progress: number | null;
+  dependencies: string | null;
   checklist: string | null;
   attachments: string | null;
   comment_count: number;
@@ -59,6 +63,10 @@ function rowToTicket(r: TicketRow): Ticket {
     createdBy: r.created_by,
     assigneeId: r.assignee_id,
     order: r.order ?? undefined,
+    startDate: r.start_date,
+    dueDate: r.due_date,
+    progress: r.progress ?? 0,
+    dependencies: parseJsonArray<string>(r.dependencies),
     checklist: parseJsonArray<ChecklistItem>(r.checklist),
     attachments: parseJsonArray<Attachment>(r.attachments),
     commentCount: r.comment_count ?? 0,
@@ -100,6 +108,10 @@ export interface CreateTicketInput {
   type?: IssueType;
   epicId?: string | null;
   teamId?: string;
+  startDate?: number | null;
+  dueDate?: number | null;
+  progress?: number;
+  dependencies?: string[];
 }
 
 export async function createTicket({
@@ -113,6 +125,10 @@ export async function createTicket({
   type = DEFAULT_ISSUE_TYPE,
   epicId = null,
   teamId = GENERAL_TEAM_ID,
+  startDate = null,
+  dueDate = null,
+  progress = 0,
+  dependencies = [],
 }: CreateTicketInput): Promise<{ id: string }> {
   const isEpicType = type === EPIC_TYPE;
   const id = genId();
@@ -122,8 +138,9 @@ export async function createTicket({
       id, title, description, priority, type,
       sprint_id, status, epic_id, team_id,
       created_by, assignee_id, "order",
+      start_date, due_date, progress, dependencies,
       comment_count, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     [
       id,
       title.trim(),
@@ -137,6 +154,12 @@ export async function createTicket({
       createdBy,
       assigneeId,
       now, // order
+      startDate,
+      dueDate,
+      progress,
+      Array.isArray(dependencies) && dependencies.length > 0
+        ? JSON.stringify(dependencies)
+        : null,
       now, // created_at
       now, // updated_at
     ],
@@ -147,24 +170,42 @@ export async function createTicket({
 
 export async function reorderTicket(
   id: string,
-  { order, status }: { order: number; status?: string },
+  { order, status, progress }: { order: number; status?: string; progress?: number },
 ): Promise<void> {
+  // Build a dynamic SET list so we hit the same row in one write —
+  // covering both same-column reorder (order only) and cross-column
+  // drop (order + status + maybe auto-progress).
+  const sets: string[] = [`"order" = ?`, "updated_at = ?"];
+  const params: unknown[] = [order, Date.now()];
   if (status !== undefined) {
-    await sqlExec(
-      `UPDATE tickets SET "order" = ?, status = ?, updated_at = ? WHERE id = ?`,
-      [order, status, Date.now(), id],
-    );
-  } else {
-    await sqlExec(
-      `UPDATE tickets SET "order" = ?, updated_at = ? WHERE id = ?`,
-      [order, Date.now(), id],
-    );
+    sets.push("status = ?");
+    params.push(status);
   }
+  if (progress !== undefined) {
+    sets.push("progress = ?");
+    params.push(progress);
+  }
+  params.push(id);
+  await sqlExec(`UPDATE tickets SET ${sets.join(", ")} WHERE id = ?`, params);
   notifyPotentialChange();
 }
 
 export type UpdateTicketInput = Partial<
-  Pick<Ticket, "title" | "description" | "priority" | "status" | "sprintId" | "assigneeId" | "type" | "epicId">
+  Pick<
+    Ticket,
+    | "title"
+    | "description"
+    | "priority"
+    | "status"
+    | "sprintId"
+    | "assigneeId"
+    | "type"
+    | "epicId"
+    | "startDate"
+    | "dueDate"
+    | "progress"
+    | "dependencies"
+  >
 >;
 
 // Map domain field name → SQL column name. Used to build dynamic
@@ -178,7 +219,14 @@ const COLUMN_BY_FIELD: Record<keyof UpdateTicketInput, string> = {
   assigneeId: "assignee_id",
   type: "type",
   epicId: "epic_id",
+  startDate: "start_date",
+  dueDate: "due_date",
+  progress: "progress",
+  dependencies: "dependencies",
 };
+
+// Fields whose value is stored as a JSON-encoded string in SQLite.
+const JSON_FIELDS = new Set<keyof UpdateTicketInput>(["dependencies"]);
 
 export async function updateTicket(id: string, data: UpdateTicketInput): Promise<void> {
   const sets: string[] = [];
@@ -187,7 +235,11 @@ export async function updateTicket(id: string, data: UpdateTicketInput): Promise
     const col = COLUMN_BY_FIELD[key];
     if (!col) continue;
     sets.push(`${col} = ?`);
-    params.push(value ?? null);
+    if (JSON_FIELDS.has(key)) {
+      params.push(value == null ? null : JSON.stringify(value));
+    } else {
+      params.push(value ?? null);
+    }
   }
   if (sets.length === 0) return;
   sets.push("updated_at = ?");
@@ -207,6 +259,25 @@ export async function deleteTicket(id: string): Promise<void> {
   );
   const attachments = parseJsonArray<Attachment>(rows[0]?.attachments);
   await deleteAllAttachmentsForTicket(id, attachments);
+
+  // Strip this id from any other ticket's dependencies array.
+  // SQLite doesn't have a portable JSON-array remove, so we fetch all
+  // rows whose `dependencies` LIKE '%"<id>"%' and rewrite each.
+  const { rows: depRows } = await sqlQuery<{ id: string; dependencies: string | null }>(
+    `SELECT id, dependencies FROM tickets WHERE dependencies LIKE ?`,
+    [`%"${id}"%`],
+  );
+  for (const r of depRows) {
+    const list = parseJsonArray<string>(r.dependencies) ?? [];
+    const next = list.filter((d) => d !== id);
+    if (next.length !== list.length) {
+      await sqlExec(
+        `UPDATE tickets SET dependencies = ?, updated_at = ? WHERE id = ?`,
+        [next.length === 0 ? null : JSON.stringify(next), Date.now(), r.id],
+      );
+    }
+  }
+
   await sqlExec("DELETE FROM tickets WHERE id = ?", [id]);
   notifyPotentialChange();
 }

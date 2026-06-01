@@ -19,6 +19,7 @@ import type { Ticket } from "../types";
 export interface TicketOverride {
   status?: string | null;
   order?: number;
+  progress?: number;
 }
 
 export interface UseTicketOptimistic {
@@ -43,7 +44,8 @@ export function useTicketOptimistic(tickets: Ticket[]): UseTicketOptimistic {
         if (!t) continue;
         const statusOk = override.status === undefined || t.status === override.status;
         const orderOk = override.order === undefined || t.order === override.order;
-        if (statusOk && orderOk) {
+        const progressOk = override.progress === undefined || t.progress === override.progress;
+        if (statusOk && orderOk && progressOk) {
           next.delete(id);
           changed = true;
         }

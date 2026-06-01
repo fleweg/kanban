@@ -20,9 +20,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 | `perf`     | Performance-only change with no behavior change                       |
 | `style`    | Formatting, whitespace (rare — usually folded into `chore`)           |
 | `docs`     | Documentation only (CLAUDE.md, README, code comments)                 |
-| `test`     | Adding or modifying tests                                             |
-| `build`    | Build system, deps, lockfiles (composer.lock, package-lock.json)      |
-| `ci`       | CI/CD config (.github/workflows, Dockerfile dev stages)               |
+| `test`     | Adding or modifying tests (no test runner in this repo yet)           |
+| `build`    | Build system, deps, lockfiles (`package.json`, `package-lock.json`)   |
+| `ci`       | CI/CD config (.github/workflows, deploy hooks)                        |
 | `chore`    | Routine maintenance, no production impact                             |
 | `revert`   | Revert a previous commit                                              |
 
@@ -34,21 +34,25 @@ in the UI or API, it's `feat` (or `fix` if it was broken). Otherwise `refactor`.
 A short noun that points at the area touched. Pick one — never multiple.
 Scopes that fit this repo:
 
-- `api` — REST + MCP endpoints
-- `mcp` — the MCP server / tools
-- `auth` — login, OAuth, API keys, sessions
-- `billing` — Stripe, plans, AI tokens
-- `apps` — AppInstaller, flexweg-apps directory
-- `storage` — S3, file CRUD, storage jobs
-- `account` — /account/* UI
-- `home` — homepage + public marketing pages
-- `pricing` — pricing page + localized variants
-- `i18n` — translations, locale routing
-- `ai` — AI providers, chat, prompt service
-- `forms` — form management feature
-- `domains` — custom domain + DNS
-- `infra` — Docker, nginx, env, deploys
-- `db` — entities, migrations, schemas
+- `backend` — anything spanning both Firebase + SQLite or the dispatcher layer
+- `firebase` — Firestore-only changes (rules, collections, services under `firebase/`)
+- `sqlite` — Flexweg SQLite-only changes (schema, services under `flexweg-sqlite/`)
+- `auth` — login, user records, role / disabled / membership, password reset
+- `teams` — team entity, TeamSwitcher, TeamsPage, team-scoped slices
+- `gantt` — Gantt view, start/due/progress fields, auto-progress rule, SVAR integration
+- `epics` — Epic-type tickets, EpicsPage, EpicPicker
+- `sprints` — sprint lifecycle, EndSprintModal, sprint scoping
+- `backlog` — BacklogPage, drag-reorder, move-to-sprint
+- `kanban` — Kanban board (`/sprint` page), drag between columns
+- `tickets` — Ticket model, TicketModal, TicketCard, comments/checklist/attachments
+- `attachments` — Flexweg Files API integration, upload/delete flows
+- `comments` — comment threads, soft-delete, notifications
+- `setup` — first-run installer / SetupForm
+- `i18n` — translations under `src/i18n/`
+- `ui` — purely visual / shared components / theming
+- `docs` — CLAUDE.md, README only
+- `dist` — committed `dist/` rebuild (rarely on its own; usually folded into the feature commit)
+- `deps` — `package.json` / `package-lock.json` bumps
 
 Omit the scope if a single label doesn't fit cleanly. Better no scope than a
 misleading one.
@@ -65,22 +69,24 @@ misleading one.
 Optional, but encouraged for anything non-trivial:
 
 ```
-feat(ai): support Google Gemini 2.5 models
+feat(gantt): add timeline view with start/due/progress fields
 
-- Add gemini-2.5-flash, -pro, -flash-lite to the model registry
-- Update GoogleAiProvider to format messages as `contents[]`
-- Migrate users on deprecated gemini-1.5-flash to gemini-2.5-flash
-- Drop the `--provider=google-ai` shortcut nobody uses
+- Add startDate, dueDate, progress (0-100) to the Ticket model
+- Mirror columns in SQLite schema via idempotent ensureGanttColumns
+- Auto-snap progress to 0/100 when status crosses first/completed column
+- Wire SVAR react-gantt under /gantt with team scoping + zoom levels
+- Update Firestore rules to allow the new fields on writes
 
-Refs: https://ai.google.dev/gemini-api/docs/changelog
+Refs: https://github.com/svar-widgets/react-gantt
 
 Co-Authored-By: Claude <noreply@anthropic.com>
 ```
 
 - Wrap at 72 chars.
 - Use bullets, not paragraphs, unless context truly warrants prose.
-- Reference issues / PRs / Sentry permalinks in a trailing `Refs:` or
-  `Closes #N` line.
+- Reference issues / PRs in a trailing `Refs:` or `Closes #N` line.
+- For changes touching both backends, mention parity explicitly so the
+  reviewer can verify both sides were kept in sync.
 
 ## What to AVOID
 

@@ -61,6 +61,10 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
       created_by TEXT,
       assignee_id TEXT,
       "order" REAL,
+      start_date INTEGER,
+      due_date INTEGER,
+      progress INTEGER NOT NULL DEFAULT 0,
+      dependencies TEXT,
       checklist TEXT,
       attachments TEXT,
       comment_count INTEGER NOT NULL DEFAULT 0,
@@ -129,6 +133,7 @@ export async function ensureSchema(): Promise<void> {
   await seedGeneralTeamIfMissing();
   await ensureTeamIdColumn("tickets");
   await ensureTeamIdColumn("sprints");
+  await ensureGanttColumns();
   await runTeamBackfillOnce();
 }
 
@@ -161,6 +166,24 @@ async function ensureTeamIdColumn(table: "tickets" | "sprints"): Promise<void> {
   await sqlExec(
     `ALTER TABLE ${table} ADD COLUMN team_id TEXT NOT NULL DEFAULT '${GENERAL_TEAM_ID}'`,
   );
+}
+
+// Adds the Gantt-related columns lazily on existing tickets tables.
+async function ensureGanttColumns(): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(tickets)`);
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("start_date")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN start_date INTEGER`);
+  }
+  if (!have.has("due_date")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN due_date INTEGER`);
+  }
+  if (!have.has("progress")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN progress INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!have.has("dependencies")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN dependencies TEXT`);
+  }
 }
 
 // One-shot backfill: assigns the general team to every legacy row

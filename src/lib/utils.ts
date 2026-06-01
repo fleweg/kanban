@@ -1,6 +1,6 @@
 import clsx, { type ClassValue } from "clsx";
 import type { Timestamp } from "firebase/firestore";
-import type { ChecklistItem, Priority, Ticket } from "../types";
+import type { ChecklistItem, Priority, Ticket, Workflow } from "../types";
 
 export const cn = (...args: ClassValue[]) => clsx(...args);
 
@@ -170,6 +170,22 @@ export function initialsFromEmail(email: string | null | undefined): string {
   if (parts.length === 0) return (email[0] ?? "?").toUpperCase();
   const letters = parts.slice(0, 2).map((p) => p[0]).join("");
   return letters.toUpperCase();
+}
+
+// Returns the auto-applied progress when a ticket's status changes.
+// - Moving into the workflow's completed column snaps progress to 100.
+// - Moving into the first column snaps progress to 0.
+// - Any other column preserves the existing progress (caller-driven).
+// Returns null when there's no auto-rule to apply (caller should leave
+// progress unchanged in that case).
+export function autoProgressForStatus(
+  status: string | null | undefined,
+  workflow: Workflow | undefined,
+): number | null {
+  if (!workflow || !status) return null;
+  if (status === workflow.completedColumnId) return 100;
+  if (status === workflow.columns[0]?.id) return 0;
+  return null;
 }
 
 // Counts done/total across a ticket's checklist. Tickets created before the

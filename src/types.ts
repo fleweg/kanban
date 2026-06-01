@@ -45,6 +45,21 @@ export interface Ticket {
   epicId: string | null;
   // Owning team. Defaults to GENERAL_TEAM_ID for legacy tickets.
   teamId: string;
+  // Gantt-related fields. All optional; tickets without dates are
+  // excluded from the Gantt page (and surfaced in a banner so the
+  // user knows which ones need dating). Stored as epoch milliseconds.
+  startDate?: number | null;
+  dueDate?: number | null;
+  // 0..100. Manual on regular tickets, derived on epics (mean of
+  // children at render time). Auto-set to 100 when status reaches
+  // the workflow's completedColumnId, and 0 when status reaches the
+  // first column; intermediate values are preserved on status moves.
+  progress?: number;
+  // Finish-to-start dependencies: array of ticket ids that this
+  // ticket waits on. When a source's dueDate changes, the cascade
+  // helper in lib/dependencies.ts shifts this ticket's startDate +
+  // dueDate to preserve duration. Cycles are refused at insertion.
+  dependencies?: string[];
   order?: number;
   checklist?: ChecklistItem[];
   attachments?: Attachment[];

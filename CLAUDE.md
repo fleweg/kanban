@@ -144,6 +144,69 @@ All reads are real-time `onSnapshot` subscriptions in `src/services/{tickets,spr
 
 Mutations are plain async functions exported from the same service files (e.g. `createTicket`, `endSprintAndStartNext`). They use `serverTimestamp()` and `writeBatch` where atomicity matters. Components await these directly — there is no global mutation/dispatch layer.
 
+### Ticket dependencies
+
+Tickets carry a `dependencies?: string[]` field — ids of other tickets this one waits on. Implicit type is **finish-to-start (FS)**: a ticket can't start before the latest `dueDate` among its dependencies. No lag, no other types in v1. See [src/lib/dependencies.ts](src/lib/dependencies.ts).
+
+- **Pure helpers**:
+  - `dependenciesAreCyclic(tickets, sourceId, candidateDepId)` → DFS that returns true if adding the edge would close a loop.
+  - `computeShiftFromDependencies(ticket, byId)` → the patch `{ startDate, dueDate }` to apply on `ticket` itself so it honours its deps (slides forward, preserves duration).
+  - `cascadeFromChangedTicket(tickets, changedId, override?)` → BFS through the dependents graph, returns an ordered list of `{ id, patch }` to apply.
+- **Cascade triggers**:
+  - TicketModal submit: when dates or deps change, the modal applies the self-shift first, then runs the cascade across the dependents.
+  - GanttPage `onUpdateTask` (drag-end on a bar): after the local update succeeds, cascade fires from the dragged ticket id.
+  - GanttPage `onAddLink` (drag-to-create from one bar to another): cycle check, self-shift on the target, save deps + new dates, then cascade.
+  - GanttPage `onDeleteLink` (delete an arrow in the Gantt): parse the composite link id `"link:<source>-><target>"`, drop the source from the target's `dependencies` array. No cascade — removing a constraint can never trip the chain.
+- **Edge cases hard-coded** in the helpers:
+  - Cycles refused at insertion. DependenciesPicker hides cycle-creating candidates from the dropdown.
+  - **Epics never appear as cascade sources** even when referenced — they have no stored `dueDate` (it's derived). A ticket may still list an epic in its `dependencies`; the entry just contributes nothing to the earliest-start computation.
+  - Undated source contributes nothing — the dependent stays where it is.
+  - When the user manually moves a dependent earlier than allowed: accepted silently. The next change of a source's `dueDate` will re-cascade and the constraint kicks back in.
+  - Deleting a ticket strips its id from every other ticket's `dependencies` (`deleteTicket` in both backends does this — Firebase via `arrayRemove`, SQLite via a `LIKE '%"id"%'` scan + rewrite).
+  - Cross-team deps allowed: the cascade reads from the full tickets list, not the team-scoped slice.
+- **Storage**: array column on `tickets` (`dependencies` JSON-encoded for SQLite, plain array on Firestore). New users get `dependencies: []` from `createTicket`; pre-feature rows are `undefined` and treated as empty arrays.
+- **Visual**: see "Gantt view" below — dependencies render as SVAR `links` with `type: "e2s"` (end-of-source → start-of-target). Composite ids `"link:<source>-><target>"` make the diff trivial.
+
+### Gantt view (`/gantt`)
+
+Tickets carry three optional Gantt-related fields: `startDate?: number | null` (ms), `dueDate?: number | null` (ms), and `progress?: number` (0–100). [src/pages/GanttPage.tsx](src/pages/GanttPage.tsx) renders them via [`@svar-ui/react-gantt`](https://github.com/svar-widgets/react-gantt) (MIT, React 19, drag-and-drop edits).
+
+- **Data model**: epics become SVAR `type: "summary"` rows; their children (tickets with `epicId` set) nest under them via `parent`. Tickets without an epic appear at the top level. Tickets without dates are excluded and counted in a banner.
+- **Epic dates**: **children win**. The epic's bar spans the union of its dated children's bands (min start → max end). The epic's own `startDate` / `dueDate` are only used as a fallback when no child has dates. This means adding/moving a child ticket automatically re-spans the parent bar without the user touching the epic.
+- **Epic progress**: not stored, computed at render time as the **simple average of all children's `progress`** (dated or not). We do NOT use SVAR's built-in `summary: { autoProgress: true }` because that only rolls up children visible on the chart — undated tickets would be silently ignored. The `summary` prop is set to `{ autoProgress: false }` and we set the rollup `progress` ourselves on the summary row.
+- **Auto-progress rule** (see `autoProgressForStatus` in [src/lib/utils.ts](src/lib/utils.ts)): moving a ticket into the workflow's `completedColumnId` snaps `progress` to 100; moving into the first column snaps to 0; intermediate columns preserve whatever the user set manually. Applied in `KanbanBoard` drag handler, `BacklogPage.moveToSprint`, and `TicketModal` submit.
+- **Drag in Gantt**: bound drags (start/end) and progress drags fire `onUpdateTask` (skip `inProgress` ticks). The handler persists via `updateTicket`. SVAR also offers an inline editor but we leave the standard ticket modal as the canonical edit path — clicks on bars open it via `onSelectTask`.
+- **Scope toggle**: admin gets a "Current team / All teams" select. Non-admins see only their current team.
+- **Zoom**: Day / Week / Month / Quarter via the `scales` prop (two-row presets in `SCALES`).
+- **Theming**: wrapped in `<Willow>` (light) or `<WillowDark>` (dark) so SVAR matches the app theme. The SVAR defaults for summary bar bg/fill are nearly the same green (#00ba94 / #099f81, ~no contrast) so [GanttPage](src/pages/GanttPage.tsx) overrides `--wx-gantt-summary-color` / `--wx-gantt-summary-fill-color` (and the task equivalents) inside `.kanban-gantt-host .wx-willow-theme, .wx-willow-dark-theme`. The host class targets the theme classes directly because SVAR sets those variables on the theme wrapper (a descendant of the host), so a parent-level override would be overridden by SVAR's more-specific selector.
+- **Persisted view preferences**: `zoom`, `scope`, `showOnlyEpics` are mirrored into `localStorage` (keys `kanbanGanttZoom`, `kanbanGanttScope`, `kanbanGanttOnlyEpics`).
+- **Default-collapsed grid panel**: SVAR exposes no prop for the initial display mode. On mount we poll the DOM for `.wxi-menu-left` and programmatically click it once to fold the grid (display goes `"all"` → `"chart"`). The user can re-open via the right arrow.
+- **Bundle cost**: ~75 KB gzipped JS + ~25 KB CSS for the SVAR dep.
+
+#### The two SVAR gotchas we hit (and how we worked around them)
+
+SVAR Gantt was designed around a single-shot `tasks` prop. Passing a fresh `tasks` array on every render — which is what naive React data-binding does — triggers SVAR's internal effect (`useEffect(..., [tasks, ...])`) to call `w.init(...)` and reset internal layout state including the grid-panel width. Two consequences:
+
+1. **Stable `tasks` prop + imperative API sync**.
+   The page captures an `initialTasks` snapshot once per "view config" (`scope|onlyEpics|zoom`) into React state and passes that to `<Gantt tasks={...}>`. Subsequent ticket edits are pushed through `api.exec("update-task" | "add-task" | "delete-task", { ..., eventSource: "<action-name>", skipUndo: true })`. **The `eventSource` must match the action name** — that's SVAR's documented fast-path in [`@svar-ui/gantt-store`](https://github.com/svar-widgets/react-gantt) which skips the heavy auto-recompute (date math + summary-kid recursion). Without the matching `eventSource`, the slow path runs and the grid panel resets. The `onUpdateTask` handler ignores events whose `eventSource` is one of `"update-task" | "add-task" | "delete-task"` so we don't loop back into `updateTicket` when our own dispatches fire.
+
+2. **DOM-side width restore after sync**.
+   Even with the fast path, SVAR re-emits the store on `u.update(...)`, which makes the columns selector return a fresh reference, which triggers `H(ne)` to reset the panel width to its default (440 with `flexgrow`, sum-of-widths without). We can't suppress that React-side. As a workaround: before each sync we capture `.wx-table-container.offsetWidth`, and in a `requestAnimationFrame` callback after the dispatches settle we re-apply that width via inline style + `flex-basis`/`flex-grow:0`/`flex-shrink:0`. This holds until the next user-driven resize (handled normally by SVAR's drag) or view-config change (deliberate re-seed).
+
+If you bump the SVAR version, re-read the relevant section of `node_modules/@svar-ui/gantt-store/dist/index.js`: search for the `c==="update-task"||c==="add-task"||...` fast-path and the `useEffect(...,[...,l,...])` init effect — both are the load-bearing structures the workarounds depend on.
+
+#### TS quirk
+
+SVAR types `columns` as `false | IColumnConfig[]` at the React level but the underlying `IConfig.columns` is `IGanttColumn[]`. Their intersection collapses to `never` for `false`. If you ever want the columns hidden entirely, cast `columns={false as unknown as []}`. We currently pass a single `{ id: "text", header: "Name", width: 260 }` column instead (without `flexgrow`) — it provides the toggle anchor for expand/collapse of summary tasks and keeps the sum-of-widths formula stable at 260 so even if the workaround above fails, the fallback default stays user-friendly.
+
+#### Links sync
+
+Dependencies render as SVAR `links`. Same stability strategy as tasks:
+- `initialLinks` snapshot captured per viewKey, passed to `<Gantt links={...}>`.
+- Subsequent diffs (add/remove) dispatched via `api.exec("add-link" | "delete-link", { ..., eventSource: "<action-name>", skipUndo: true })` — same fast-path eventSource trick as tasks.
+- Composite link ids `"link:<source>-><target>"` keep diffs trivial: a dep change is "delete the old link id, add the new one".
+- `onAddLink` / `onDeleteLink` are wired to write back into the target ticket's `dependencies` array, then trigger the cascade. They guard against feedback loops by ignoring events whose `eventSource === "add-link"` / `"delete-link"`.
+
 ### Teams (project-level partition)
 
 Tickets, sprints, and users carry a `teamId` / `teamIds` field; teams partition the kanban into independent backlogs + sprint timelines. The default team `id: "general"` is **non-deletable** and acts as the lazy-fallback for any legacy doc/row without a teamId. See [src/lib/teams.ts](src/lib/teams.ts) for `GENERAL_TEAM_ID`, the fixed 8-color palette, and chip helpers.

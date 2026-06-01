@@ -1,5 +1,5 @@
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
-import { CheckSquare, GripVertical, MessageSquare, MoreHorizontal, Paperclip } from "lucide-react";
+import { CheckSquare, GripVertical, Link2, MessageSquare, MoreHorizontal, Paperclip } from "lucide-react";
 import { cn, checklistProgress, getPriority, htmlToPlainText } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
@@ -29,6 +29,11 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
   // plain text. htmlToPlainText handles both — strips tags or returns the
   // text untouched, then collapses whitespace.
   const descriptionPreview = htmlToPlainText(ticket.description);
+  const progress = ticket.progress ?? 0;
+  // Show the progress bar only when it carries information: anything
+  // between 1 and 99. 0% and 100% are already encoded by the column
+  // the card sits in (first / completed), so the extra bar is noise.
+  const showProgress = progress > 0 && progress < 100;
 
   return (
     <div
@@ -68,6 +73,20 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
               <EpicChip epic={epic} onClick={onEpicClick} />
             </div>
           )}
+          {showProgress && (
+            <div
+              className="mt-2 flex items-center gap-2"
+              title={`${progress}% complete`}
+            >
+              <div className="flex-1 h-1 rounded-full bg-surface-100 overflow-hidden dark:bg-surface-700">
+                <div
+                  className="h-full bg-blue-500 transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <span className="text-[10px] tabular-nums text-surface-500 dark:text-surface-400">{progress}%</span>
+            </div>
+          )}
           <div className="mt-2.5 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
               <span className={cn("chip", priority.color)}>{priority.label}</span>
@@ -101,6 +120,15 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
                 >
                   <Paperclip className="h-3 w-3" />
                   {attachmentCount}
+                </span>
+              )}
+              {(ticket.dependencies?.length ?? 0) > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
+                  title={`Depends on ${ticket.dependencies?.length} ticket${(ticket.dependencies?.length ?? 0) > 1 ? "s" : ""}`}
+                >
+                  <Link2 className="h-3 w-3" />
+                  {ticket.dependencies?.length}
                 </span>
               )}
             </div>
