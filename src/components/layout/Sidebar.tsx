@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
+import { BarChart3, Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
@@ -17,6 +17,7 @@ const baseItems: NavItem[] = [
   { to: "/sprint", label: "Active Sprint", icon: LayoutGrid },
   { to: "/sprints", label: "Sprints", icon: Layers },
   { to: "/epics", label: "Epics", icon: Crown },
+  { to: "/gantt", label: "Gantt", icon: BarChart3 },
   { to: "/teams", label: "Teams", icon: UsersRound },
   { to: "/settings", label: "Settings", icon: Settings },
 ];

@@ -6,8 +6,8 @@ import { TicketCard } from "../components/tickets/TicketCard";
 import { TicketModal } from "../components/tickets/TicketModal";
 import { EmptyState } from "../components/ui/EmptyState";
 import { useAppData } from "../context/AppDataContext";
-import { moveTicketToSprint, reorderTicket } from "../services/tickets";
-import { compareTickets, computeNewOrder } from "../lib/utils";
+import { moveTicketToSprint, reorderTicket, updateTicket } from "../services/tickets";
+import { autoProgressForStatus, compareTickets, computeNewOrder } from "../lib/utils";
 import { useTicketOptimistic } from "../hooks/useTicketOptimistic";
 import type { Ticket } from "../types";
 
@@ -26,6 +26,13 @@ export function BacklogPage() {
     if (!activeSprint) return;
     const initialStatus = workflow?.columns?.[0]?.id ?? null;
     await moveTicketToSprint(ticket.id, activeSprint.id, initialStatus);
+    // Backlog → first column means progress 0; apply the auto-rule in
+    // a follow-up update since moveTicketToSprint only handles sprint
+    // + status.
+    const autoProg = autoProgressForStatus(initialStatus, workflow);
+    if (autoProg !== null && ticket.progress !== autoProg) {
+      await updateTicket(ticket.id, { progress: autoProg });
+    }
   }
 
   async function handleDragEnd(result: DropResult) {

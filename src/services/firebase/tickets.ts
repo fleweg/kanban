@@ -1,14 +1,18 @@
 import {
   addDoc,
+  arrayRemove,
   collection,
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  where,
+  writeBatch,
 } from "firebase/firestore";
 import { collections, getDb } from "../firebaseClient";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
@@ -49,6 +53,10 @@ export interface CreateTicketInput {
   type?: IssueType;
   epicId?: string | null;
   teamId?: string;
+  startDate?: number | null;
+  dueDate?: number | null;
+  progress?: number;
+  dependencies?: string[];
 }
 
 export async function createTicket({
@@ -62,6 +70,10 @@ export async function createTicket({
   type = DEFAULT_ISSUE_TYPE,
   epicId = null,
   teamId = GENERAL_TEAM_ID,
+  startDate = null,
+  dueDate = null,
+  progress = 0,
+  dependencies = [],
 }: CreateTicketInput) {
   // Epics are project-level containers — they never live in a sprint or in a
   // workflow column, and they cannot belong to another epic.
@@ -77,6 +89,10 @@ export async function createTicket({
     type,
     epicId: isEpicType ? null : epicId,
     teamId,
+    startDate,
+    dueDate,
+    progress,
+    dependencies,
     // Initial order = now, so newly created tickets land at the top of their
     // list (descending sort). Drag-reorder writes new midpoint values later.
     order: Date.now(),
@@ -87,17 +103,34 @@ export async function createTicket({
 
 // Used by drag-and-drop handlers. Updates the order and optionally the column
 // (status) atomically — relevant for cross-column drops on the Kanban board.
+// Also accepts an optional progress (used by the caller when a status change
+// snaps the auto-progress rule — see autoProgressForStatus in lib/utils).
 export async function reorderTicket(
   id: string,
-  { order, status }: { order: number; status?: string },
+  { order, status, progress }: { order: number; status?: string; progress?: number },
 ): Promise<void> {
   const data: Record<string, unknown> = { order, updatedAt: serverTimestamp() };
   if (status !== undefined) data.status = status;
+  if (progress !== undefined) data.progress = progress;
   return updateDoc(ticketDoc(id), data);
 }
 
 export type UpdateTicketInput = Partial<
-  Pick<Ticket, "title" | "description" | "priority" | "status" | "sprintId" | "assigneeId" | "type" | "epicId">
+  Pick<
+    Ticket,
+    | "title"
+    | "description"
+    | "priority"
+    | "status"
+    | "sprintId"
+    | "assigneeId"
+    | "type"
+    | "epicId"
+    | "startDate"
+    | "dueDate"
+    | "progress"
+    | "dependencies"
+  >
 >;
 
 export async function updateTicket(id: string, data: UpdateTicketInput): Promise<void> {
@@ -117,6 +150,25 @@ export async function deleteTicket(id: string): Promise<void> {
   const snap = await getDoc(ticketDoc(id));
   const attachments = (snap.data()?.attachments ?? []) as Attachment[];
   await deleteAllAttachmentsForTicket(id, attachments);
+
+  // Cleanup: remove this id from any other ticket's `dependencies`.
+  // We use array-contains to find candidates server-side, then a
+  // single batch with arrayRemove() per doc.
+  const db = getDb();
+  const depSnap = await getDocs(
+    query(ticketsCollection(), where("dependencies", "array-contains", id)),
+  );
+  if (!depSnap.empty) {
+    const batch = writeBatch(db);
+    depSnap.forEach((d) =>
+      batch.update(d.ref, {
+        dependencies: arrayRemove(id),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+    await batch.commit();
+  }
+
   return deleteDoc(ticketDoc(id));
 }
 

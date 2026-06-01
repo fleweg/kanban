@@ -2,7 +2,7 @@ import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction
 import { Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { RichTextEditor } from "../ui/RichTextEditor";
-import { checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
+import { autoProgressForStatus, checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
 import { createTicket, deleteTicket, moveTicketToTeam, updateTicket } from "../../services/tickets";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
@@ -12,10 +12,15 @@ import { CommentList } from "../comments/CommentList";
 import { TypeIcon } from "../issueTypes/TypeIcon";
 import { TypePicker } from "../issueTypes/TypePicker";
 import { EpicPicker } from "../epics/EpicPicker";
+import { DependenciesPicker } from "./DependenciesPicker";
 import { Checklist } from "./Checklist";
 import { Attachments } from "./Attachments";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
 import { GENERAL_TEAM_ID } from "../../lib/teams";
+import {
+  cascadeFromChangedTicket,
+  computeShiftFromDependencies,
+} from "../../lib/dependencies";
 import type { IssueType, Priority, Team, Ticket, UserRecord, Workflow } from "../../types";
 
 type TabId = "details" | "properties" | "checklist" | "attachments" | "comments";
@@ -29,6 +34,12 @@ interface TicketFormState {
   epicId: string | null;
   status: string | null;
   teamId: string;
+  // ISO yyyy-mm-dd strings used by the native date inputs. Empty
+  // string === unset. Converted to/from ms at the boundary.
+  startDate: string;
+  dueDate: string;
+  progress: number;
+  dependencies: string[];
 }
 
 const blank: TicketFormState = {
@@ -40,7 +51,35 @@ const blank: TicketFormState = {
   epicId: null,
   status: null,
   teamId: GENERAL_TEAM_ID,
+  startDate: "",
+  dueDate: "",
+  progress: 0,
+  dependencies: [],
 };
+
+function msToDateInput(ms: number | null | undefined): string {
+  if (ms == null) return "";
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function dateInputToMs(s: string): number | null {
+  if (!s) return null;
+  // <input type="date"> emits yyyy-mm-dd. Parse as local midnight to
+  // avoid timezone drift across DST boundaries.
+  const [y, m, d] = s.split("-").map((v) => Number.parseInt(v, 10));
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d).getTime();
+}
+
+function clampProgress(v: number): number {
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(100, Math.round(v)));
+}
 
 interface TicketModalProps {
   open: boolean;
@@ -81,6 +120,10 @@ export function TicketModal({
         type: ticket.type ?? DEFAULT_ISSUE_TYPE,
         epicId: ticket.epicId ?? null,
         teamId: ticket.teamId ?? GENERAL_TEAM_ID,
+        startDate: msToDateInput(ticket.startDate),
+        dueDate: msToDateInput(ticket.dueDate),
+        progress: ticket.progress ?? 0,
+        dependencies: Array.isArray(ticket.dependencies) ? [...ticket.dependencies] : [],
       });
     } else {
       setForm({
@@ -130,33 +173,111 @@ export function TicketModal({
         if (teamChanged) {
           await moveTicketToTeam(ticket.id, form.teamId);
         }
+        // Status may have just changed via the Status select. If the
+        // new status triggers an auto-progress (first/completed column),
+        // override the form's progress to keep the rule consistent.
+        const finalStatus = teamChanged ? null : isEpicForm ? null : form.status ?? null;
+        const autoProg = autoProgressForStatus(finalStatus, workflow);
+        const finalProgress = isEpicForm
+          ? undefined
+          : autoProg !== null
+            ? autoProg
+            : clampProgress(form.progress);
+
+        // Apply the dep-driven self-shift before writing: if this
+        // ticket now violates one of its deps' dueDate, slide its
+        // own start/due forward to honour the constraint.
+        let startMs = dateInputToMs(form.startDate);
+        let dueMs = dateInputToMs(form.dueDate);
+        const newDeps = isEpicForm ? [] : form.dependencies;
+        if (!isEpicForm && newDeps.length > 0) {
+          const hypothetical: Ticket = {
+            ...ticket,
+            startDate: startMs,
+            dueDate: dueMs,
+            dependencies: newDeps,
+          };
+          const byId = new Map(tickets.map((t) => [t.id, t.id === ticket.id ? hypothetical : t]));
+          const shift = computeShiftFromDependencies(hypothetical, byId);
+          if (shift) {
+            startMs = shift.startDate ?? startMs;
+            if (shift.dueDate !== undefined) dueMs = shift.dueDate;
+          }
+        }
+
         await updateTicket(ticket.id, {
           title: form.title,
           description: form.description,
           priority: form.priority,
           // moveTicketToTeam already nulls status; skip status here when
           // we just changed team to avoid clobbering the null write.
-          status: teamChanged ? null : isEpicForm ? null : form.status ?? null,
+          status: finalStatus,
           assigneeId: form.assigneeId ?? null,
           type: form.type,
           epicId: isEpicForm ? null : form.epicId ?? null,
+          startDate: startMs,
+          dueDate: dueMs,
+          dependencies: isEpicForm ? [] : newDeps,
+          ...(finalProgress !== undefined ? { progress: finalProgress } : {}),
         });
+
+        // Cascade: if THIS ticket's dueDate changed and other tickets
+        // depend on it, shift them too. We feed the cascade helper
+        // the override we just wrote so it sees the post-update state.
+        const dueChanged = ticket.dueDate !== dueMs;
+        if (dueChanged) {
+          const patches = cascadeFromChangedTicket(tickets, ticket.id, {
+            startDate: startMs,
+            dueDate: dueMs,
+            dependencies: newDeps,
+          });
+          await Promise.all(patches.map((p) => updateTicket(p.id, p.patch)));
+        }
       } else {
+        const createStatus = isEpicForm
+          ? null
+          : defaultSprintId
+            ? defaultStatus ?? workflow?.columns?.[0]?.id ?? null
+            : null;
+        const createAutoProg = autoProgressForStatus(createStatus, workflow);
+
+        // Same self-shift logic at creation: if the user picked deps
+        // and dates that clash with them, slide forward.
+        let startMs = dateInputToMs(form.startDate);
+        let dueMs = dateInputToMs(form.dueDate);
+        const newDeps = isEpicForm ? [] : form.dependencies;
+        if (!isEpicForm && newDeps.length > 0) {
+          const hypothetical = {
+            id: "__new__",
+            dependencies: newDeps,
+            startDate: startMs,
+            dueDate: dueMs,
+            type: form.type,
+          } as unknown as Ticket;
+          const byId = new Map<string, Ticket>(tickets.map((t) => [t.id, t]));
+          byId.set("__new__", hypothetical);
+          const shift = computeShiftFromDependencies(hypothetical, byId);
+          if (shift) {
+            startMs = shift.startDate ?? startMs;
+            if (shift.dueDate !== undefined) dueMs = shift.dueDate;
+          }
+        }
+
         await createTicket({
           title: form.title,
           description: form.description,
           priority: form.priority,
           sprintId: isEpicForm ? null : defaultSprintId,
-          status: isEpicForm
-            ? null
-            : defaultSprintId
-              ? defaultStatus ?? workflow?.columns?.[0]?.id ?? null
-              : null,
+          status: createStatus,
           createdBy: user?.uid ?? null,
           assigneeId: form.assigneeId ?? null,
           type: form.type,
           epicId: isEpicForm ? null : form.epicId ?? null,
           teamId: form.teamId,
+          startDate: startMs,
+          dueDate: dueMs,
+          progress: isEpicForm ? 0 : createAutoProg ?? clampProgress(form.progress),
+          dependencies: newDeps,
         });
       }
       onClose();
@@ -267,6 +388,7 @@ export function TicketModal({
             showStatusField={showStatusField}
             workflow={workflow}
             teams={teams}
+            ticketId={ticket?.id ?? null}
           />
         </div>
 
@@ -395,9 +517,10 @@ interface PropertiesPaneProps {
   showStatusField: boolean;
   workflow?: Workflow;
   teams: Team[];
+  ticketId: string | null;
 }
 
-function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow, teams }: PropertiesPaneProps) {
+function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow, teams, ticketId }: PropertiesPaneProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
@@ -480,6 +603,59 @@ function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow, 
             ))}
           </select>
         </div>
+      )}
+
+      {!isEpicForm && (
+        <>
+          <div>
+            <label className="label" htmlFor="ticket-start">
+              Start date
+            </label>
+            <input
+              id="ticket-start"
+              type="date"
+              className="input"
+              value={form.startDate}
+              onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="ticket-due">
+              Due date
+            </label>
+            <input
+              id="ticket-due"
+              type="date"
+              className="input"
+              value={form.dueDate}
+              onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label flex items-center justify-between" htmlFor="ticket-progress">
+              <span>Progress</span>
+              <span className="tabular-nums text-surface-700 dark:text-surface-200">{form.progress}%</span>
+            </label>
+            <input
+              id="ticket-progress"
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              className="w-full"
+              value={form.progress}
+              onChange={(e) => setForm((f) => ({ ...f, progress: Number(e.target.value) }))}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <span className="label">Depends on</span>
+            <DependenciesPicker
+              ownerId={ticketId}
+              value={form.dependencies}
+              onChange={(next) => setForm((f) => ({ ...f, dependencies: next }))}
+            />
+          </div>
+        </>
       )}
     </div>
   );

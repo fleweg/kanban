@@ -3,7 +3,7 @@ import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 import { KanbanColumn } from "./KanbanColumn";
 import { TicketModal } from "../tickets/TicketModal";
 import { reorderTicket } from "../../services/tickets";
-import { compareTickets, computeNewOrder } from "../../lib/utils";
+import { autoProgressForStatus, compareTickets, computeNewOrder } from "../../lib/utils";
 import { useTicketOptimistic } from "../../hooks/useTicketOptimistic";
 import type { Ticket, Workflow } from "../../types";
 
@@ -40,6 +40,11 @@ export function KanbanBoard({ workflow, tickets, sprintId }: KanbanBoardProps) {
     const destCol = ticketsByColumn[destination.droppableId] ?? [];
     const newOrder = computeNewOrder(destCol, draggableId, destination.index);
     const crossingColumn = destination.droppableId !== source.droppableId;
+    // Auto-snap progress when crossing into the first/completed column
+    // so the Gantt view reflects status without manual editing.
+    const autoProgress = crossingColumn
+      ? autoProgressForStatus(destination.droppableId, workflow)
+      : null;
 
     // Apply the optimistic move BEFORE awaiting the server mutation.
     // The hook clears the override automatically once the next data
@@ -47,12 +52,14 @@ export function KanbanBoard({ workflow, tickets, sprintId }: KanbanBoardProps) {
     setOverride(draggableId, {
       order: newOrder,
       ...(crossingColumn ? { status: destination.droppableId } : {}),
+      ...(autoProgress !== null ? { progress: autoProgress } : {}),
     });
 
     try {
       await reorderTicket(draggableId, {
         order: newOrder,
         ...(crossingColumn ? { status: destination.droppableId } : {}),
+        ...(autoProgress !== null ? { progress: autoProgress } : {}),
       });
     } catch (err) {
       console.error(err);
