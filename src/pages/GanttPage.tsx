@@ -15,6 +15,7 @@ import {
   cascadeFromChangedTicket,
   computeShiftFromDependencies,
   dependenciesAreCyclic,
+  topoSortByDependencies,
 } from "../lib/dependencies";
 import { cn } from "../lib/utils";
 import type { Ticket, Workflow } from "../types";
@@ -761,7 +762,11 @@ function buildGanttTasks({ tickets, epics, showOnlyEpics }: BuildArgs): {
   }
 
   for (const epic of epics) {
-    const epicChildren = childrenByEpic.get(epic.id) ?? [];
+    // Sort children so a source appears BEFORE its dependents within
+    // the same epic group. Stable when no dep edge connects two
+    // tickets (preserves the original order, which is "created at
+    // desc" via the upstream subscription).
+    const epicChildren = topoSortByDependencies(childrenByEpic.get(epic.id) ?? []);
     const datedChildren: Array<{ ticket: Ticket; band: { start: Date; end: Date } }> = [];
     for (const child of epicChildren) {
       const band = deriveBand(child);
@@ -830,8 +835,10 @@ function buildGanttTasks({ tickets, epics, showOnlyEpics }: BuildArgs): {
   if (!showOnlyEpics) {
     // Tickets without an epic — render at the top level so they're not
     // lost. No synthetic parent row to keep the data shape predictable
-    // for SVAR's tree.
-    for (const t of orphans) {
+    // for SVAR's tree. Sort by dependency so sources come before their
+    // dependents in the row order.
+    const sortedOrphans = topoSortByDependencies(orphans);
+    for (const t of sortedOrphans) {
       const band = deriveBand(t);
       if (!band) {
         undatedCount++;
