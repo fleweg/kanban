@@ -5,7 +5,10 @@
       "Bash(firebase projects:list)",
       "Bash(command -v gcloud)",
       "Bash(gcloud config *)",
-      "Bash(gcloud auth *)"
+      "Bash(gcloud auth *)",
+      "Bash(npm i *)",
+      "Edit(/.claude/skills/create-mr/**)",
+      "WebFetch(domain:docs.svar.dev)"
     ]
   }
 }
