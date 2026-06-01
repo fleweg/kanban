@@ -97,6 +97,63 @@ export function computeShiftFromDependencies(
   return patch;
 }
 
+// Stable topological sort: returns the group with sources before
+// their dependents, preserving the original relative order when two
+// tickets are not connected by a dep edge.
+//
+// Only deps INTERNAL to the group affect the order — a dep on a
+// ticket outside `group` is ignored, since "outside" tickets are
+// rendered in a different section (different epic, top-level, etc.)
+// and can't be repositioned by this sort anyway.
+//
+// On a cycle (shouldn't happen — we refuse them at insertion — but be
+// defensive), the remaining tickets are appended in original order.
+export function topoSortByDependencies(group: Ticket[]): Ticket[] {
+  if (group.length <= 1) return group;
+  const groupIds = new Set(group.map((t) => t.id));
+  const index = new Map<string, number>();
+  group.forEach((t, i) => index.set(t.id, i));
+
+  // Build dependents-of map (reverse-edge), and inDegree.
+  const dependentsOf = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+  for (const t of group) inDegree.set(t.id, 0);
+  for (const t of group) {
+    for (const depId of t.dependencies ?? []) {
+      if (!groupIds.has(depId)) continue;
+      dependentsOf.set(depId, [...(dependentsOf.get(depId) ?? []), t.id]);
+      inDegree.set(t.id, (inDegree.get(t.id) ?? 0) + 1);
+    }
+  }
+
+  // Seed the queue with everything that has no intra-group deps,
+  // preserving the original order between them so ties don't shuffle.
+  const queue = group.filter((t) => inDegree.get(t.id) === 0).map((t) => t.id);
+  const out: Ticket[] = [];
+  const seen = new Set<string>();
+
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const t = group[index.get(id)!];
+    out.push(t);
+    // Decrement dependents' inDegree; when one hits 0, enqueue it.
+    // Maintain stable order by inserting at the end (Kahn-style).
+    for (const dependentId of dependentsOf.get(id) ?? []) {
+      const next = (inDegree.get(dependentId) ?? 0) - 1;
+      inDegree.set(dependentId, next);
+      if (next === 0 && !seen.has(dependentId)) queue.push(dependentId);
+    }
+  }
+
+  // Cycle (or unreachable nodes) — append the rest in original order.
+  if (out.length < group.length) {
+    for (const t of group) if (!seen.has(t.id)) out.push(t);
+  }
+  return out;
+}
+
 // BFS from a changed source (its dueDate has just changed) through
 // the dependents graph, accumulating the date patches needed to keep
 // the chain consistent. Returns the patches to apply in topological

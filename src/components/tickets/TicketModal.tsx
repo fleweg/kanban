@@ -376,7 +376,17 @@ export function TicketModal({
           submit from any tab. Inactive panes are hidden via display:none, not
           unmounted, so state and focus stay intact across tab switches. */}
       <form id="ticket-form" onSubmit={handleSubmit} className="space-y-4">
-        <div className={cn(isEdit && activeTab !== "details" && "hidden", "space-y-4")}>
+        {/* `key` forces a clean unmount + remount of DetailsPane (and the
+            TipTap RichTextEditor inside it) when the modal switches from
+            one ticket to another without closing first. Without this,
+            TipTap mutates the DOM while React still holds a stale VDOM
+            of the previous ticket's description → "Node.insertBefore:
+            Child to insert before is not a child of this node" at the
+            next reconciliation. */}
+        <div
+          key={ticket?.id ?? "new"}
+          className={cn(isEdit && activeTab !== "details" && "hidden", "space-y-4")}
+        >
           <DetailsPane form={form} setForm={setForm} />
         </div>
 
