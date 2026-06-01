@@ -1,5 +1,6 @@
 import clsx, { type ClassValue } from "clsx";
 import type { Timestamp } from "firebase/firestore";
+import i18n from "../i18n";
 import type { ChecklistItem, Priority, Ticket, Workflow } from "../types";
 
 export const cn = (...args: ClassValue[]) => clsx(...args);
@@ -42,6 +43,65 @@ export function formatDateTime(value: DateLike): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+// Picks the right time unit + signed delta for a "X time ago" output.
+// Used by both the locale-aware long form (Intl.RelativeTimeFormat)
+// and the compact "22j / 3h / 5mo" variant rendered on TicketCard.
+function selectRelativeUnit(ms: number): { value: number; unit: Intl.RelativeTimeFormatUnit } {
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return { value: -sec, unit: "second" };
+  const min = Math.floor(sec / 60);
+  if (min < 60) return { value: -min, unit: "minute" };
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return { value: -hr, unit: "hour" };
+  const day = Math.floor(hr / 24);
+  if (day < 30) return { value: -day, unit: "day" };
+  const month = Math.floor(day / 30);
+  if (month < 12) return { value: -month, unit: "month" };
+  const year = Math.floor(day / 365);
+  return { value: -year, unit: "year" };
+}
+
+// Locale-aware "X days ago" using the active i18next locale. Output
+// examples: "il y a 22 jours" (fr), "22 days ago" (en), "vor 22 Tagen"
+// (de). Returns "—" for nullish values.
+export function formatAge(value: DateLike): string {
+  const date = toDate(value);
+  if (!date) return "—";
+  const ms = Date.now() - date.getTime();
+  if (ms < 0) return "—"; // dates in the future shouldn't appear here
+  const { value: v, unit } = selectRelativeUnit(ms);
+  const locale = i18n.language || "en";
+  try {
+    return new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "long" }).format(v, unit);
+  } catch {
+    // Defensive: malformed locale → fall back to English.
+    return new Intl.RelativeTimeFormat("en", { numeric: "auto", style: "long" }).format(v, unit);
+  }
+}
+
+// Compact age suffixes — language-agnostic, fit narrow chips on cards.
+// Mapping: 22d, 3h, 5mo, 2y, 30s, 12min. We keep the unit symbols
+// short so they're identical across locales (a tooltip with the full
+// localized string is provided by the caller).
+export function formatAgeCompact(value: DateLike): string {
+  const date = toDate(value);
+  if (!date) return "—";
+  const ms = Date.now() - date.getTime();
+  if (ms < 0) return "—";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}min`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h`;
+  const day = Math.floor(hr / 24);
+  if (day < 30) return `${day}d`;
+  const month = Math.floor(day / 30);
+  if (month < 12) return `${month}mo`;
+  const year = Math.floor(day / 365);
+  return `${year}y`;
 }
 
 // Compact relative time for fresh items, falls back to absolute date after 24h.

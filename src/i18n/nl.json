@@ -146,5 +146,8 @@
       "uploadFailed": "Kan config.js niet uploaden naar Flexweg",
       "generic": "Er is iets misgegaan."
     }
+  },
+  "tickets": {
+    "createdAgo": "Aangemaakt {{age}}"
   }
 }

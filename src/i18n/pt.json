@@ -146,5 +146,8 @@
       "uploadFailed": "Não foi possível carregar config.js para o Flexweg",
       "generic": "Ocorreu um erro."
     }
+  },
+  "tickets": {
+    "createdAgo": "Criado {{age}}"
   }
 }

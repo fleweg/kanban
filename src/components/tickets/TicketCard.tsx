@@ -1,6 +1,7 @@
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
-import { CheckSquare, GripVertical, Link2, MessageSquare, MoreHorizontal, Paperclip } from "lucide-react";
-import { cn, checklistProgress, getPriority, htmlToPlainText } from "../../lib/utils";
+import { CheckSquare, Clock, GripVertical, Link2, MessageSquare, MoreHorizontal, Paperclip } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { cn, checklistProgress, formatAge, formatAgeCompact, getPriority, htmlToPlainText } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
 import { TypeIcon } from "../issueTypes/TypeIcon";
@@ -17,6 +18,7 @@ interface TicketCardProps {
 }
 
 export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compact, onEpicClick }: TicketCardProps) {
+  const { t } = useTranslation();
   const priority = getPriority(ticket.priority);
   const { getUserById, getEpicById } = useAppData();
   const assignee = getUserById(ticket.assigneeId);
@@ -129,6 +131,15 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
                 >
                   <Link2 className="h-3 w-3" />
                   {ticket.dependencies?.length}
+                </span>
+              )}
+              {ticket.createdAt && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 tabular-nums dark:text-surface-400"
+                  title={t("tickets.createdAgo", { age: formatAge(ticket.createdAt) })}
+                >
+                  <Clock className="h-3 w-3" />
+                  {formatAgeCompact(ticket.createdAt)}
                 </span>
               )}
             </div>
