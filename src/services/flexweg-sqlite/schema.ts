@@ -67,6 +67,8 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
       dependencies TEXT,
       checklist TEXT,
       attachments TEXT,
+      asana_gid TEXT,
+      asana_permalink_url TEXT,
       comment_count INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
@@ -134,6 +136,7 @@ export async function ensureSchema(): Promise<void> {
   await ensureTeamIdColumn("tickets");
   await ensureTeamIdColumn("sprints");
   await ensureGanttColumns();
+  await ensureAsanaColumns();
   await runTeamBackfillOnce();
 }
 
@@ -166,6 +169,18 @@ async function ensureTeamIdColumn(table: "tickets" | "sprints"): Promise<void> {
   await sqlExec(
     `ALTER TABLE ${table} ADD COLUMN team_id TEXT NOT NULL DEFAULT '${GENERAL_TEAM_ID}'`,
   );
+}
+
+// Adds the Asana-connector columns lazily on existing tickets tables.
+async function ensureAsanaColumns(): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(tickets)`);
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("asana_gid")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN asana_gid TEXT`);
+  }
+  if (!have.has("asana_permalink_url")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN asana_permalink_url TEXT`);
+  }
 }
 
 // Adds the Gantt-related columns lazily on existing tickets tables.

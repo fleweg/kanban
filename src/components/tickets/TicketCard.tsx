@@ -133,6 +133,20 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
                   {ticket.dependencies?.length}
                 </span>
               )}
+              {ticket.asanaGid && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-300"
+                  title={`Linked to Asana task ${ticket.asanaGid}`}
+                  onClick={(e) => {
+                    if (!ticket.asanaPermalinkUrl) return;
+                    e.stopPropagation();
+                    window.open(ticket.asanaPermalinkUrl, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  <Link2 className="h-3 w-3" />
+                  Asana
+                </span>
+              )}
               {ticket.createdAt && (
                 <span
                   className="inline-flex items-center gap-1 text-[11px] text-surface-500 tabular-nums dark:text-surface-400"

@@ -35,6 +35,8 @@ interface TicketRow {
   checklist: string | null;
   attachments: string | null;
   comment_count: number;
+  asana_gid: string | null;
+  asana_permalink_url: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -70,6 +72,8 @@ function rowToTicket(r: TicketRow): Ticket {
     checklist: parseJsonArray<ChecklistItem>(r.checklist),
     attachments: parseJsonArray<Attachment>(r.attachments),
     commentCount: r.comment_count ?? 0,
+    asanaGid: r.asana_gid,
+    asanaPermalinkUrl: r.asana_permalink_url,
     createdAt: Timestamp.fromMillis(r.created_at),
     updatedAt: Timestamp.fromMillis(r.updated_at),
   };
@@ -112,6 +116,8 @@ export interface CreateTicketInput {
   dueDate?: number | null;
   progress?: number;
   dependencies?: string[];
+  asanaGid?: string | null;
+  asanaPermalinkUrl?: string | null;
 }
 
 export async function createTicket({
@@ -129,6 +135,8 @@ export async function createTicket({
   dueDate = null,
   progress = 0,
   dependencies = [],
+  asanaGid = null,
+  asanaPermalinkUrl = null,
 }: CreateTicketInput): Promise<{ id: string }> {
   const isEpicType = type === EPIC_TYPE;
   const id = genId();
@@ -139,8 +147,9 @@ export async function createTicket({
       sprint_id, status, epic_id, team_id,
       created_by, assignee_id, "order",
       start_date, due_date, progress, dependencies,
+      asana_gid, asana_permalink_url,
       comment_count, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     [
       id,
       title.trim(),
@@ -160,6 +169,8 @@ export async function createTicket({
       Array.isArray(dependencies) && dependencies.length > 0
         ? JSON.stringify(dependencies)
         : null,
+      asanaGid,
+      asanaPermalinkUrl,
       now, // created_at
       now, // updated_at
     ],
@@ -205,6 +216,8 @@ export type UpdateTicketInput = Partial<
     | "dueDate"
     | "progress"
     | "dependencies"
+    | "asanaGid"
+    | "asanaPermalinkUrl"
   >
 >;
 
@@ -223,6 +236,8 @@ const COLUMN_BY_FIELD: Record<keyof UpdateTicketInput, string> = {
   dueDate: "due_date",
   progress: "progress",
   dependencies: "dependencies",
+  asanaGid: "asana_gid",
+  asanaPermalinkUrl: "asana_permalink_url",
 };
 
 // Fields whose value is stored as a JSON-encoded string in SQLite.

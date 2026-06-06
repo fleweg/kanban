@@ -1,5 +1,5 @@
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { Trash2 } from "lucide-react";
+import { ExternalLink, Link2, Trash2, Unlink } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { RichTextEditor } from "../ui/RichTextEditor";
 import { autoProgressForStatus, checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
@@ -9,6 +9,10 @@ import { useAuth } from "../../context/AuthContext";
 import { UserAvatar } from "../users/UserAvatar";
 import { UserPicker } from "../users/UserPicker";
 import { CommentList } from "../comments/CommentList";
+import { AsanaCommentList } from "../comments/AsanaCommentList";
+import { LinkAsanaModal } from "./LinkAsanaModal";
+import { useAsanaConfig } from "../../hooks/useAsanaConfig";
+import { syncAsanaStatusForTicket } from "../../lib/asanaStatusSync";
 import { TypeIcon } from "../issueTypes/TypeIcon";
 import { TypePicker } from "../issueTypes/TypePicker";
 import { EpicPicker } from "../epics/EpicPicker";
@@ -40,6 +44,8 @@ interface TicketFormState {
   dueDate: string;
   progress: number;
   dependencies: string[];
+  asanaGid: string | null;
+  asanaPermalinkUrl: string | null;
 }
 
 const blank: TicketFormState = {
@@ -55,6 +61,8 @@ const blank: TicketFormState = {
   dueDate: "",
   progress: 0,
   dependencies: [],
+  asanaGid: null,
+  asanaPermalinkUrl: null,
 };
 
 function msToDateInput(ms: number | null | undefined): string {
@@ -102,11 +110,13 @@ export function TicketModal({
 }: TicketModalProps) {
   const { user } = useAuth();
   const { tickets, getUserById, teams, currentTeamId } = useAppData();
+  const asanaConfig = useAsanaConfig();
   const isEdit = Boolean(ticket?.id);
   const [form, setForm] = useState<TicketFormState>(blank);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("details");
+  const [linkAsanaOpen, setLinkAsanaOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -124,6 +134,8 @@ export function TicketModal({
         dueDate: msToDateInput(ticket.dueDate),
         progress: ticket.progress ?? 0,
         dependencies: Array.isArray(ticket.dependencies) ? [...ticket.dependencies] : [],
+        asanaGid: ticket.asanaGid ?? null,
+        asanaPermalinkUrl: ticket.asanaPermalinkUrl ?? null,
       });
     } else {
       setForm({
@@ -218,8 +230,25 @@ export function TicketModal({
           startDate: startMs,
           dueDate: dueMs,
           dependencies: isEpicForm ? [] : newDeps,
+          asanaGid: form.asanaGid,
+          asanaPermalinkUrl: form.asanaPermalinkUrl,
           ...(finalProgress !== undefined ? { progress: finalProgress } : {}),
         });
+
+        // Status custom-field sync on Asana — fire-and-forget so a
+        // network blip doesn't roll back the local save. Only writes
+        // when the column actually changed and the connector has a
+        // mapping for it.
+        if (
+          form.asanaGid &&
+          finalStatus &&
+          finalStatus !== ticket.status &&
+          asanaConfig
+        ) {
+          syncAsanaStatusForTicket(form.asanaGid, finalStatus, asanaConfig).catch(
+            (e) => console.warn("Asana status sync failed:", e),
+          );
+        }
 
         // Cascade: if THIS ticket's dueDate changed and other tickets
         // depend on it, shift them too. We feed the cascade helper
@@ -278,6 +307,8 @@ export function TicketModal({
           dueDate: dueMs,
           progress: isEpicForm ? 0 : createAutoProg ?? clampProgress(form.progress),
           dependencies: newDeps,
+          asanaGid: form.asanaGid,
+          asanaPermalinkUrl: form.asanaPermalinkUrl,
         });
       }
       onClose();
@@ -387,6 +418,15 @@ export function TicketModal({
           key={ticket?.id ?? "new"}
           className={cn(isEdit && activeTab !== "details" && "hidden", "space-y-4")}
         >
+          <AsanaBar
+            enabled={Boolean(asanaConfig?.enabled)}
+            linkedGid={form.asanaGid}
+            permalinkUrl={form.asanaPermalinkUrl}
+            onLinkClick={() => setLinkAsanaOpen(true)}
+            onUnlink={() =>
+              setForm((f) => ({ ...f, asanaGid: null, asanaPermalinkUrl: null }))
+            }
+          />
           <DetailsPane form={form} setForm={setForm} />
         </div>
 
@@ -425,10 +465,85 @@ export function TicketModal({
 
       {isEdit && ticket && (
         <div className={cn(activeTab !== "comments" && "hidden", "mt-4")}>
-          <CommentList ticketId={ticket.id} />
+          {form.asanaGid ? (
+            <AsanaCommentList asanaGid={form.asanaGid} permalinkUrl={form.asanaPermalinkUrl} />
+          ) : (
+            <CommentList ticketId={ticket.id} />
+          )}
         </div>
       )}
+
+      <LinkAsanaModal
+        open={linkAsanaOpen}
+        onClose={() => setLinkAsanaOpen(false)}
+        defaultApplyDescription={!isEdit || !form.description.trim()}
+        defaultOverwriteTitle={!isEdit || !form.title.trim()}
+        onLink={(result, applyDescription, overwriteTitle) => {
+          setForm((f) => ({
+            ...f,
+            asanaGid: result.gid,
+            asanaPermalinkUrl: result.permalinkUrl,
+            title: overwriteTitle ? result.task.name : f.title,
+            description: applyDescription ? result.descriptionHtml : f.description,
+          }));
+          setLinkAsanaOpen(false);
+        }}
+      />
     </Modal>
+  );
+}
+
+interface AsanaBarProps {
+  enabled: boolean;
+  linkedGid: string | null;
+  permalinkUrl: string | null;
+  onLinkClick: () => void;
+  onUnlink: () => void;
+}
+
+// Shown below the title field on the Details pane. Two states:
+// not linked (button to open the LinkAsanaModal), or linked (chip with
+// gid + permalink + unlink button). Connector disabled = component
+// renders nothing at all.
+function AsanaBar({ enabled, linkedGid, permalinkUrl, onLinkClick, onUnlink }: AsanaBarProps) {
+  if (!enabled) return null;
+  if (linkedGid) {
+    return (
+      <div className="flex items-center gap-2 rounded-md bg-blue-50 px-2.5 py-1.5 text-xs text-blue-800 ring-1 ring-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:ring-blue-700/40">
+        <Link2 className="h-3.5 w-3.5" />
+        <span className="font-medium">Linked to Asana task {linkedGid}</span>
+        {permalinkUrl && (
+          <a
+            href={permalinkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 underline"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Open
+          </a>
+        )}
+        <button
+          type="button"
+          onClick={onUnlink}
+          className="ml-auto inline-flex items-center gap-1 text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
+          title="Unlink — drops Asana association but does not delete the Asana task."
+        >
+          <Unlink className="h-3 w-3" />
+          Unlink
+        </button>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onLinkClick}
+      className="btn-secondary text-xs"
+    >
+      <Link2 className="h-3.5 w-3.5" />
+      Link from Asana
+    </button>
   );
 }
 

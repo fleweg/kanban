@@ -9,12 +9,15 @@ import { useAppData } from "../context/AppDataContext";
 import { moveTicketToSprint, reorderTicket, updateTicket } from "../services/tickets";
 import { autoProgressForStatus, compareTickets, computeNewOrder } from "../lib/utils";
 import { useTicketOptimistic } from "../hooks/useTicketOptimistic";
+import { useAsanaConfig } from "../hooks/useAsanaConfig";
+import { syncAsanaStatusForTicket } from "../lib/asanaStatusSync";
 import type { Ticket } from "../types";
 
 const DROPPABLE_ID = "backlog";
 
 export function BacklogPage() {
   const { backlogTickets, activeSprint, workflow, loading } = useAppData();
+  const asanaConfig = useAsanaConfig();
   const [editing, setEditing] = useState<Ticket | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -32,6 +35,13 @@ export function BacklogPage() {
     const autoProg = autoProgressForStatus(initialStatus, workflow);
     if (autoProg !== null && ticket.progress !== autoProg) {
       await updateTicket(ticket.id, { progress: autoProg });
+    }
+    // Asana side: ticket just entered the sprint board — mirror the
+    // column id onto its custom field if configured.
+    if (ticket.asanaGid && initialStatus) {
+      syncAsanaStatusForTicket(ticket.asanaGid, initialStatus, asanaConfig).catch(
+        (e) => console.warn("Asana status sync failed:", e),
+      );
     }
   }
 
