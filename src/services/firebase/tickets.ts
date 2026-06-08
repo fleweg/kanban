@@ -57,6 +57,8 @@ export interface CreateTicketInput {
   dueDate?: number | null;
   progress?: number;
   dependencies?: string[];
+  asanaGid?: string | null;
+  asanaPermalinkUrl?: string | null;
 }
 
 export async function createTicket({
@@ -74,6 +76,8 @@ export async function createTicket({
   dueDate = null,
   progress = 0,
   dependencies = [],
+  asanaGid = null,
+  asanaPermalinkUrl = null,
 }: CreateTicketInput) {
   // Epics are project-level containers — they never live in a sprint or in a
   // workflow column, and they cannot belong to another epic.
@@ -93,6 +97,8 @@ export async function createTicket({
     dueDate,
     progress,
     dependencies,
+    asanaGid: asanaGid ?? null,
+    asanaPermalinkUrl: asanaPermalinkUrl ?? null,
     // Initial order = now, so newly created tickets land at the top of their
     // list (descending sort). Drag-reorder writes new midpoint values later.
     order: Date.now(),
@@ -130,6 +136,8 @@ export type UpdateTicketInput = Partial<
     | "dueDate"
     | "progress"
     | "dependencies"
+    | "asanaGid"
+    | "asanaPermalinkUrl"
   >
 >;
 

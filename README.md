@@ -196,6 +196,14 @@ service cloud.firestore {
       allow read:  if isActiveUser();
       allow write: if isAdmin();
     }
+    // Asana connector config (PAT + optional status-field mapping) —
+    // same posture as the Flexweg key: read by every signed-in user
+    // (the ticket modal needs it to call the Asana API), write by
+    // admins only.
+    match /config/asana    {
+      allow read:  if isActiveUser();
+      allow write: if isAdmin();
+    }
 
     match /tickets/{ticketId}/comments/{commentId} {
       allow read:   if isActiveUser();
@@ -220,7 +228,18 @@ service cloud.firestore {
                     && request.resource.data.role == "user"
                     && request.resource.data.disabled == false
                     && request.resource.data.teamIds is list;
-      allow update, delete: if isAdmin();
+      // Admins can update or delete any user record. Users can update
+      // their own record as long as role / disabled / email don't
+      // change — this lets them set/clear their own `avatarPath` +
+      // `avatarUrl` via the Profile modal without granting any
+      // privilege-escalation surface.
+      allow update: if isAdmin()
+                    || (signedIn()
+                        && request.auth.uid == uid
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.disabled == resource.data.disabled
+                        && request.resource.data.email == resource.data.email);
+      allow delete: if isAdmin();
     }
   }
 }

@@ -41,6 +41,9 @@ interface UserRow {
   email: string;
   role: string;
   disabled: number;
+  avatar_path: string | null;
+  avatar_url: string | null;
+  asana_access_token: string | null;
   created_at: number;
   created_by: string | null;
 }
@@ -52,6 +55,9 @@ function rowToUser(r: UserRow, teamIds: string[]): UserRecord {
     role: r.role as UserRole,
     disabled: !!r.disabled,
     teamIds: teamIds.length > 0 ? teamIds : [GENERAL_TEAM_ID],
+    avatarPath: r.avatar_path,
+    avatarUrl: r.avatar_url,
+    asanaAccessToken: r.asana_access_token,
     createdAt: Timestamp.fromMillis(r.created_at),
     createdBy: r.created_by ?? undefined,
   };
@@ -152,8 +158,14 @@ export async function ensureSelfUserRecord(authUser: FirebaseUser): Promise<User
       params: [GENERAL_TEAM_ID, authUser.uid],
     },
   ]);
-  const teamIds = await fetchTeamIdsFor(authUser.uid);
   notifyPotentialChange();
+  // Re-read the row instead of synthesising a return value — that way
+  // we pick up locally-stored fields the upsert didn't touch
+  // (avatarPath/Url, asanaAccessToken). Falls back to a minimal synth
+  // if the read somehow fails so the caller still gets a record.
+  const reread = await getUserRecord(authUser.uid);
+  if (reread) return reread;
+  const teamIds = await fetchTeamIdsFor(authUser.uid);
   return {
     id: authUser.uid,
     email,
@@ -245,5 +257,21 @@ export async function setUserTeams(uid: string, teamIds: string[]): Promise<void
     });
   }
   await sqlBatch(stmts);
+  notifyPotentialChange();
+}
+
+// Self-set the personal Asana PAT. Pass null/empty to clear (fall back
+// to the team-wide default token configured in Settings). No row-level
+// auth at the SQLite layer — discipline is client-side: always called
+// with auth-context's `uid` so a user can only write their own row.
+export async function setSelfAsanaToken(
+  uid: string,
+  token: string | null,
+): Promise<void> {
+  const normalized = token && token.trim() ? token.trim() : null;
+  await sqlExec(
+    "UPDATE users SET asana_access_token = ? WHERE uid = ?",
+    [normalized, uid],
+  );
   notifyPotentialChange();
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
-import { Trash2 } from "lucide-react";
+import { ExternalLink, Link2, Loader2, RefreshCw, Trash2, Unlink } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { RichTextEditor } from "../ui/RichTextEditor";
 import { autoProgressForStatus, checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
@@ -9,6 +9,12 @@ import { useAuth } from "../../context/AuthContext";
 import { UserAvatar } from "../users/UserAvatar";
 import { UserPicker } from "../users/UserPicker";
 import { CommentList } from "../comments/CommentList";
+import { AsanaCommentList } from "../comments/AsanaCommentList";
+import { LinkAsanaModal } from "./LinkAsanaModal";
+import { useAsanaConfig } from "../../hooks/useAsanaConfig";
+import { syncAsanaStatusForTicket } from "../../lib/asanaStatusSync";
+import { AsanaApiError, getTask } from "../../services/asana/client";
+import { asanaToTipTap } from "../../services/asana/html";
 import { TypeIcon } from "../issueTypes/TypeIcon";
 import { TypePicker } from "../issueTypes/TypePicker";
 import { EpicPicker } from "../epics/EpicPicker";
@@ -23,7 +29,7 @@ import {
 } from "../../lib/dependencies";
 import type { IssueType, Priority, Team, Ticket, UserRecord, Workflow } from "../../types";
 
-type TabId = "details" | "properties" | "checklist" | "attachments" | "comments";
+type TabId = "details" | "properties" | "children" | "checklist" | "attachments" | "comments";
 
 interface TicketFormState {
   title: string;
@@ -40,6 +46,8 @@ interface TicketFormState {
   dueDate: string;
   progress: number;
   dependencies: string[];
+  asanaGid: string | null;
+  asanaPermalinkUrl: string | null;
 }
 
 const blank: TicketFormState = {
@@ -55,6 +63,8 @@ const blank: TicketFormState = {
   dueDate: "",
   progress: 0,
   dependencies: [],
+  asanaGid: null,
+  asanaPermalinkUrl: null,
 };
 
 function msToDateInput(ms: number | null | undefined): string {
@@ -89,6 +99,12 @@ interface TicketModalProps {
   defaultStatus?: string | null;
   defaultType?: IssueType;
   workflow?: Workflow;
+  // Called when the user clicks a child ticket inside the Children
+  // tab of an epic. The parent should swap whatever it's tracking as
+  // the currently-open ticket so the modal re-mounts on that one.
+  // When omitted, the row click is a no-op (the page that opens this
+  // modal doesn't want the swap behavior).
+  onSwitchTicket?: (ticket: Ticket) => void;
 }
 
 export function TicketModal({
@@ -99,14 +115,27 @@ export function TicketModal({
   defaultStatus = null,
   defaultType = DEFAULT_ISSUE_TYPE,
   workflow,
+  onSwitchTicket,
 }: TicketModalProps) {
   const { user } = useAuth();
   const { tickets, getUserById, teams, currentTeamId } = useAppData();
+  const asanaConfig = useAsanaConfig();
   const isEdit = Boolean(ticket?.id);
   const [form, setForm] = useState<TicketFormState>(blank);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("details");
+  const [linkAsanaOpen, setLinkAsanaOpen] = useState(false);
+  // Counter that increments each time the form's description is
+  // replaced programmatically (Asana Link, Asana Resync). The
+  // DetailsPane's wrapping key concatenates this counter so the
+  // RichTextEditor (TipTap) gets a full unmount + remount instead of
+  // having setContent() mutate the DOM under React's feet — see the
+  // CLAUDE.md "Rich text descriptions" + "TicketModal key=…" notes.
+  // Without this, a Resync triggers the documented React reconciler
+  // crash: "Node.insertBefore: Child to insert before is not a child
+  // of this node".
+  const [formRevision, setFormRevision] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -124,6 +153,8 @@ export function TicketModal({
         dueDate: msToDateInput(ticket.dueDate),
         progress: ticket.progress ?? 0,
         dependencies: Array.isArray(ticket.dependencies) ? [...ticket.dependencies] : [],
+        asanaGid: ticket.asanaGid ?? null,
+        asanaPermalinkUrl: ticket.asanaPermalinkUrl ?? null,
       });
     } else {
       setForm({
@@ -135,6 +166,10 @@ export function TicketModal({
     }
     setError(null);
     setActiveTab("details");
+    // Fresh form contents → fresh editor instance. Resetting alongside
+    // the form prevents the previous ticket's revision count from
+    // carrying over when the modal reopens on a new ticket.
+    setFormRevision(0);
   }, [open, ticket, defaultStatus, defaultType, currentTeamId]);
 
   const isEpicForm = form.type === EPIC_TYPE;
@@ -218,8 +253,25 @@ export function TicketModal({
           startDate: startMs,
           dueDate: dueMs,
           dependencies: isEpicForm ? [] : newDeps,
+          asanaGid: form.asanaGid,
+          asanaPermalinkUrl: form.asanaPermalinkUrl,
           ...(finalProgress !== undefined ? { progress: finalProgress } : {}),
         });
+
+        // Status custom-field sync on Asana — fire-and-forget so a
+        // network blip doesn't roll back the local save. Only writes
+        // when the column actually changed and the connector has a
+        // mapping for it.
+        if (
+          form.asanaGid &&
+          finalStatus &&
+          finalStatus !== ticket.status &&
+          asanaConfig
+        ) {
+          syncAsanaStatusForTicket(form.asanaGid, finalStatus, asanaConfig).catch(
+            (e) => console.warn("Asana status sync failed:", e),
+          );
+        }
 
         // Cascade: if THIS ticket's dueDate changed and other tickets
         // depend on it, shift them too. We feed the cascade helper
@@ -278,6 +330,8 @@ export function TicketModal({
           dueDate: dueMs,
           progress: isEpicForm ? 0 : createAutoProg ?? clampProgress(form.progress),
           dependencies: newDeps,
+          asanaGid: form.asanaGid,
+          asanaPermalinkUrl: form.asanaPermalinkUrl,
         });
       }
       onClose();
@@ -309,6 +363,16 @@ export function TicketModal({
   const liveTicket = ticket?.id ? tickets.find((t) => t.id === ticket.id) ?? ticket : null;
   const { done: checklistDone, total: checklistTotal } = checklistProgress(liveTicket?.checklist);
   const attachmentCount = liveTicket?.attachments?.length ?? 0;
+  // Children = every ticket whose epicId points at the epic we're
+  // editing. Computed from the unfiltered `tickets` list (not the
+  // team-scoped slice) so the user sees every child even if some were
+  // moved to a different team. Epics-on-epics aren't a thing (the
+  // service layer rejects epicId on epics), so type === "epic" is
+  // implicit-skip by the same query.
+  const childrenTickets =
+    isEdit && isEpicForm && ticket?.id
+      ? tickets.filter((t) => t.epicId === ticket.id)
+      : [];
   const modalTitle = isEdit
     ? isEpicForm
       ? "Edit epic"
@@ -369,6 +433,8 @@ export function TicketModal({
           checklistDone={checklistDone}
           checklistTotal={checklistTotal}
           attachmentCount={attachmentCount}
+          childrenCount={childrenTickets.length}
+          showChildrenTab={isEpicForm}
         />
       )}
 
@@ -384,9 +450,33 @@ export function TicketModal({
             Child to insert before is not a child of this node" at the
             next reconciliation. */}
         <div
-          key={ticket?.id ?? "new"}
+          key={`${ticket?.id ?? "new"}-${formRevision}`}
           className={cn(isEdit && activeTab !== "details" && "hidden", "space-y-4")}
         >
+          <AsanaBar
+            enabled={Boolean(asanaConfig?.enabled)}
+            linkedGid={form.asanaGid}
+            permalinkUrl={form.asanaPermalinkUrl}
+            onLinkClick={() => setLinkAsanaOpen(true)}
+            onUnlink={() =>
+              setForm((f) => ({ ...f, asanaGid: null, asanaPermalinkUrl: null }))
+            }
+            onResync={async () => {
+              if (!form.asanaGid) return;
+              const task = await getTask(form.asanaGid);
+              setForm((f) => ({
+                ...f,
+                title: task.name ?? f.title,
+                description: asanaToTipTap(task.html_notes),
+                asanaPermalinkUrl: task.permalink_url ?? f.asanaPermalinkUrl,
+              }));
+              // Force the RichTextEditor to remount with the new
+              // description instead of letting TipTap setContent()
+              // mutate the live DOM (which races with React's commit
+              // phase and crashes the reconciler).
+              setFormRevision((r) => r + 1);
+            }}
+          />
           <DetailsPane form={form} setForm={setForm} />
         </div>
 
@@ -409,6 +499,25 @@ export function TicketModal({
         )}
       </form>
 
+      {/* Children pane — epic-only. Lists the tickets that have this
+          epic's id as their epicId. Click a row to swap the modal onto
+          that child (via the onSwitchTicket callback). */}
+      {isEdit && isEpicForm && ticket && (
+        <div className={cn(activeTab !== "children" && "hidden", "mt-4")}>
+          <EpicChildrenPane
+            children={childrenTickets}
+            workflow={workflow}
+            getUserById={getUserById}
+            onSelect={(child) => {
+              // Switch the modal to the child. The parent decides
+              // what to do — typically setEditing(child) on the page
+              // that owns this modal.
+              onSwitchTicket?.(child);
+            }}
+          />
+        </div>
+      )}
+
       {/* Checklist and Comments live outside the form: they persist their
           changes directly to Firestore (no Save-button round trip). */}
       {isEdit && ticket && (
@@ -425,10 +534,138 @@ export function TicketModal({
 
       {isEdit && ticket && (
         <div className={cn(activeTab !== "comments" && "hidden", "mt-4")}>
-          <CommentList ticketId={ticket.id} />
+          {form.asanaGid ? (
+            <AsanaCommentList asanaGid={form.asanaGid} permalinkUrl={form.asanaPermalinkUrl} />
+          ) : (
+            <CommentList ticketId={ticket.id} />
+          )}
         </div>
       )}
+
+      <LinkAsanaModal
+        open={linkAsanaOpen}
+        onClose={() => setLinkAsanaOpen(false)}
+        defaultApplyDescription={!isEdit || !form.description.trim()}
+        defaultOverwriteTitle={!isEdit || !form.title.trim()}
+        onLink={(result, applyDescription, overwriteTitle) => {
+          setForm((f) => ({
+            ...f,
+            asanaGid: result.gid,
+            asanaPermalinkUrl: result.permalinkUrl,
+            title: overwriteTitle ? result.task.name : f.title,
+            description: applyDescription ? result.descriptionHtml : f.description,
+          }));
+          // Same TipTap-remount safeguard as the Resync path — only
+          // bumps when the description was actually replaced, to
+          // avoid clobbering the user's editor state otherwise.
+          if (applyDescription) setFormRevision((r) => r + 1);
+          setLinkAsanaOpen(false);
+        }}
+      />
     </Modal>
+  );
+}
+
+interface AsanaBarProps {
+  enabled: boolean;
+  linkedGid: string | null;
+  permalinkUrl: string | null;
+  onLinkClick: () => void;
+  onUnlink: () => void;
+  onResync: () => Promise<void>;
+}
+
+// Shown below the title field on the Details pane. Two states:
+// not linked (button to open the LinkAsanaModal), or linked (chip with
+// gid + permalink + resync + unlink buttons). Connector disabled =
+// component renders nothing at all.
+function AsanaBar({ enabled, linkedGid, permalinkUrl, onLinkClick, onUnlink, onResync }: AsanaBarProps) {
+  const [resyncing, setResyncing] = useState(false);
+  const [resyncError, setResyncError] = useState<string | null>(null);
+  const [resyncedAt, setResyncedAt] = useState<number | null>(null);
+
+  if (!enabled) return null;
+
+  async function handleResync() {
+    setResyncing(true);
+    setResyncError(null);
+    try {
+      await onResync();
+      setResyncedAt(Date.now());
+    } catch (err) {
+      if (err instanceof AsanaApiError) {
+        setResyncError(`Asana ${err.status}: ${err.message}`);
+      } else {
+        setResyncError((err as Error).message);
+      }
+    } finally {
+      setResyncing(false);
+    }
+  }
+
+  if (linkedGid) {
+    // Suppress the brief "Synced…" flash if a follow-up edit started.
+    const showSyncedFlash = resyncedAt !== null && Date.now() - resyncedAt < 3000;
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 rounded-md bg-blue-50 px-2.5 py-1.5 text-xs text-blue-800 ring-1 ring-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:ring-blue-700/40">
+          <Link2 className="h-3.5 w-3.5" />
+          <span className="font-medium">Linked to Asana task {linkedGid}</span>
+          {permalinkUrl && (
+            <a
+              href={permalinkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={handleResync}
+            disabled={resyncing}
+            className="ml-auto inline-flex items-center gap-1 text-blue-700 hover:text-blue-900 disabled:opacity-50 dark:text-blue-200 dark:hover:text-blue-100"
+            title="Pull the latest title + description from Asana. You still need to Save to persist the changes."
+          >
+            {resyncing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            {resyncing ? "Syncing…" : "Resync"}
+          </button>
+          <button
+            type="button"
+            onClick={onUnlink}
+            className="inline-flex items-center gap-1 text-red-600 hover:text-red-700 dark:text-red-300 dark:hover:text-red-200"
+            title="Unlink — drops Asana association but does not delete the Asana task."
+          >
+            <Unlink className="h-3 w-3" />
+            Unlink
+          </button>
+        </div>
+        {resyncError && (
+          <p className="text-[11px] text-red-700 dark:text-red-300">{resyncError}</p>
+        )}
+        {showSyncedFlash && !resyncError && (
+          <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+            Synced from Asana. Save to keep the changes.
+          </p>
+        )}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onLinkClick}
+      className="btn-secondary text-xs"
+    >
+      <Link2 className="h-3.5 w-3.5" />
+      Link from Asana
+    </button>
   );
 }
 
@@ -439,6 +676,8 @@ interface TabsProps {
   checklistDone: number;
   checklistTotal: number;
   attachmentCount: number;
+  childrenCount: number;
+  showChildrenTab: boolean;
 }
 
 function Tabs({
@@ -448,10 +687,23 @@ function Tabs({
   checklistDone,
   checklistTotal,
   attachmentCount,
+  childrenCount,
+  showChildrenTab,
 }: TabsProps) {
   const items: { id: TabId; label: string }[] = [
     { id: "details", label: "Details" },
     { id: "properties", label: "Properties" },
+    // Children tab only on epics; comes right after Properties so it
+    // sits near the high-level metadata rather than competing with
+    // the per-ticket activity tabs (checklist / attachments / comments).
+    ...(showChildrenTab
+      ? [
+          {
+            id: "children" as TabId,
+            label: childrenCount > 0 ? `Children (${childrenCount})` : "Children",
+          },
+        ]
+      : []),
     {
       id: "checklist",
       label: checklistTotal > 0 ? `Checklist (${checklistDone}/${checklistTotal})` : "Checklist",
@@ -693,5 +945,91 @@ function CreatedBySubtitle({ creator, ticket }: CreatedBySubtitleProps) {
         {ticket.createdAt && <> &middot; {formatDateTime(ticket.createdAt)}</>}
       </span>
     </span>
+  );
+}
+
+interface EpicChildrenPaneProps {
+  children: Ticket[];
+  workflow?: Workflow;
+  getUserById: (uid: string | null | undefined) => UserRecord | null;
+  onSelect: (ticket: Ticket) => void;
+}
+
+// Read-only list of the epic's children — one row per child ticket.
+// Click swaps the modal onto that ticket (via onSelect). Grouped by
+// status so the user can spot the active vs. backlog vs. done work
+// at a glance. Children without a sprint (backlog) get bucketed
+// separately at the top, then the rest follow the workflow column
+// order so the layout mirrors the Kanban board.
+function EpicChildrenPane({ children, workflow, getUserById, onSelect }: EpicChildrenPaneProps) {
+  if (children.length === 0) {
+    return (
+      <p className="text-sm italic text-surface-500 dark:text-surface-400">
+        No tickets are linked to this epic yet. Edit a ticket and pick this epic
+        from the Epic field to add it here.
+      </p>
+    );
+  }
+
+  // Bucket: { backlog: [...], "col-id-1": [...], ... }. Children
+  // without a sprintId go to backlog; the rest are grouped by status,
+  // with unknown columns funnelled into "other" so we never silently
+  // drop a row (e.g. when an admin renames a column id).
+  const buckets = new Map<string, Ticket[]>();
+  const columnOrder: { id: string; name: string }[] = [];
+  buckets.set("backlog", []);
+  columnOrder.push({ id: "backlog", name: "Backlog" });
+  if (workflow) {
+    for (const col of workflow.columns) {
+      buckets.set(col.id, []);
+      columnOrder.push({ id: col.id, name: col.name });
+    }
+  }
+  buckets.set("other", []);
+  columnOrder.push({ id: "other", name: "Other" });
+
+  for (const t of children) {
+    let key: string;
+    if (!t.sprintId) key = "backlog";
+    else if (t.status && buckets.has(t.status)) key = t.status;
+    else key = "other";
+    buckets.get(key)!.push(t);
+  }
+
+  return (
+    <div className="space-y-4">
+      {columnOrder.map((col) => {
+        const list = buckets.get(col.id) ?? [];
+        if (list.length === 0) return null;
+        return (
+          <div key={col.id}>
+            <h4 className="text-[11px] font-semibold uppercase tracking-wide text-surface-500 mb-1.5 dark:text-surface-400">
+              {col.name} ({list.length})
+            </h4>
+            <ul className="space-y-1">
+              {list.map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(t)}
+                    className="w-full flex items-center gap-2 rounded-md px-2.5 py-2 text-left hover:bg-surface-100 transition-colors dark:hover:bg-surface-800"
+                  >
+                    <span className="shrink-0">
+                      <TypeIcon type={t.type} size="sm" />
+                    </span>
+                    <span className="flex-1 min-w-0 text-sm text-surface-800 truncate dark:text-surface-100">
+                      {t.title}
+                    </span>
+                    {t.assigneeId ? (
+                      <UserAvatar user={getUserById(t.assigneeId)} size="xs" />
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -14,6 +14,8 @@ import { useUsers } from "../hooks/useUsers";
 import { useTeams } from "../hooks/useTeams";
 import { useAuth } from "./AuthContext";
 import { runTeamsBootMigration } from "../services/teams";
+import { ensureSchema } from "../services/flexweg-sqlite/schema";
+import { getBackendKind } from "../lib/runtimeConfig";
 import { EPIC_TYPE } from "../lib/issueTypes";
 import { GENERAL_TEAM_ID } from "../lib/teams";
 import type { Sprint, Team, Ticket, UserRecord, Workflow } from "../types";
@@ -89,6 +91,25 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     runTeamsBootMigration().catch((err) =>
       // eslint-disable-next-line no-console
       console.warn("Teams boot migration failed (will retry next boot):", err),
+    );
+  }, []);
+
+  // SQLite mode only — re-run schema migrations on every authenticated
+  // boot. The full `ensureSchema()` is idempotent (CREATE TABLE IF NOT
+  // EXISTS, ALTER TABLE ADD COLUMN only when the column is missing,
+  // seeds guarded by existence checks, team backfill guarded by a
+  // config flag) so it's safe to call on every mount.
+  //
+  // This is what picks up post-install ALTER TABLE migrations on
+  // deployments that ran the SetupForm BEFORE a new column was added
+  // (avatar columns, asana_access_token, etc.). Previously these never
+  // ran outside the install flow → existing installs would 400 on
+  // the first write to a new column.
+  useEffect(() => {
+    if (getBackendKind() !== "flexweg-sqlite") return;
+    ensureSchema().catch((err) =>
+      // eslint-disable-next-line no-console
+      console.warn("SQLite schema migration failed (will retry next boot):", err),
     );
   }, []);
 

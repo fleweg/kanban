@@ -109,3 +109,16 @@ export async function setUserTeams(uid: string, teamIds: string[]): Promise<void
 export async function deleteUserRecord(uid: string): Promise<void> {
   return deleteDoc(userDoc(uid));
 }
+
+// Self-set the personal Asana PAT on the user record. Pass null/empty
+// to clear (fall back to the team-wide default). The Firestore rules
+// allow self-update of users/{uid} as long as role/disabled/email
+// stay the same — see README → "Firestore security rules". This call
+// only touches `asanaAccessToken` so it satisfies the rule.
+export async function setSelfAsanaToken(
+  uid: string,
+  token: string | null,
+): Promise<void> {
+  const normalized = token && token.trim() ? token.trim() : null;
+  return updateDoc(userDoc(uid), { asanaAccessToken: normalized });
+}

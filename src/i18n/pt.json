@@ -149,5 +149,64 @@
   },
   "tickets": {
     "createdAgo": "Criado {{age}}"
+  },
+  "profile": {
+    "title": "O seu perfil",
+    "subtitle": "Faça a gestão do seu avatar — o que outros membros veem ao lado do seu nome.",
+    "done": "Concluído",
+    "avatar": {
+      "upload": "Carregar avatar",
+      "replace": "Substituir",
+      "remove": "Remover",
+      "hint": "JPG / PNG até {{mb}} MB. Redimensionamos e recortamos quadrado automaticamente."
+    },
+    "password": {
+      "title": "Alterar palavra-passe",
+      "current": "Palavra-passe atual",
+      "new": "Nova palavra-passe",
+      "confirm": "Confirmar nova palavra-passe",
+      "submit": "Atualizar palavra-passe",
+      "submitting": "A atualizar…",
+      "cancel": "Cancelar",
+      "success": "Palavra-passe atualizada.",
+      "show": "Mostrar palavras-passe",
+      "hide": "Ocultar palavras-passe",
+      "errors": {
+        "missing": "Os três campos são obrigatórios.",
+        "tooShort": "A nova palavra-passe deve ter pelo menos {{min}} caracteres.",
+        "mismatch": "A nova palavra-passe e a confirmação não correspondem.",
+        "invalidCurrent": "A palavra-passe atual está incorreta.",
+        "generic": "Não foi possível atualizar a palavra-passe."
+      }
+    },
+    "asana": {
+      "title": "Token pessoal Asana",
+      "token": "Personal Access Token",
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "test": "Testar ligação",
+      "testing": "A testar…",
+      "testOk": "Ligado como {{who}}",
+      "submit": "Guardar token",
+      "submitting": "A guardar…",
+      "clear": "Remover token pessoal",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (definido — deixar vazio para manter)"
+      },
+      "status": {
+        "configured": "O seu token Asana pessoal está definido. Comentários e atualizações de estado publicados a partir do Kanban aparecerão sob a sua identidade Asana.",
+        "fallback": "Ainda não há token pessoal definido. As publicações usam o token Asana predefinido da equipa até guardar o seu."
+      },
+      "success": {
+        "saved": "Token Asana pessoal guardado.",
+        "cleared": "Token pessoal removido. A voltar ao predefinido da equipa."
+      },
+      "errors": {
+        "missing": "Cole primeiro um Personal Access Token.",
+        "invalid": "Asana rejeitou este token (401).",
+        "generic": "Não foi possível guardar o token Asana."
+      }
+    }
   }
 }

@@ -5,6 +5,7 @@ import {
   Database,
   Download,
   Flame,
+  Plug,
   RefreshCw,
   Save,
   Settings as SettingsIcon,
@@ -18,6 +19,9 @@ import {
   getFlexwegConfig,
   setFlexwegConfig,
 } from "../services/flexwegConfig";
+import { getAsanaConfig, setAsanaConfig, type AsanaStatusMap } from "../services/asanaConfig";
+import { getMe, invalidateAsanaTokenCache, AsanaApiError } from "../services/asana/client";
+import { invalidateAsanaConfigCache } from "../hooks/useAsanaConfig";
 import { getBackendKind, getRuntimeConfig } from "../lib/runtimeConfig";
 
 export function SettingsPage() {
@@ -38,6 +42,8 @@ export function SettingsPage() {
           to the local SQLite `config` table. Same admin-only-write,
           all-active-users-read posture. */}
       {isAdmin && <FlexwegApiSettings backend={backend} />}
+
+      {isAdmin && <AsanaSettings />}
 
       {isAdmin && <BackendSettings backend={backend} />}
     </div>
@@ -244,6 +250,273 @@ function WorkflowSettings() {
         Tip: changing a column id while tickets reference it will move them back to the first column on the board.
       </p>
     </>
+  );
+}
+
+// Admin-only block. Stores the Asana PAT + optional status-sync mapping
+// in Firestore (`config/asana`) or the SQLite `config` table.
+// Read by every signed-in user — same admin-write / all-users-read
+// posture as FlexwegApiSettings. Documented compromise.
+function AsanaSettings() {
+  const { workflow } = useAppData();
+  const [enabled, setEnabled] = useState(false);
+  const [accessToken, setAccessToken] = useState("");
+  const [hasExistingToken, setHasExistingToken] = useState(false);
+  const [statusFieldGid, setStatusFieldGid] = useState("");
+  const [statusMap, setStatusMap] = useState<AsanaStatusMap>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getAsanaConfig()
+      .then((cfg) => {
+        if (cancelled) return;
+        if (cfg) {
+          setEnabled(cfg.enabled);
+          setHasExistingToken(Boolean(cfg.accessToken));
+          setStatusFieldGid(cfg.statusFieldGid ?? "");
+          setStatusMap(cfg.statusMap ?? {});
+        }
+      })
+      .catch((err) => !cancelled && setError((err as Error).message))
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function resolveTokenForSave(): Promise<string> {
+    if (accessToken) return accessToken;
+    // The textarea is empty but a token was already persisted — keep it.
+    const cfg = await getAsanaConfig();
+    return cfg?.accessToken ?? "";
+  }
+
+  async function handleSave() {
+    setError(null);
+    setSaved(false);
+    setTestResult(null);
+    if (enabled && !accessToken && !hasExistingToken) {
+      setError("Personal access token is required when the connector is enabled.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const token = await resolveTokenForSave();
+      const trimmedField = statusFieldGid.trim();
+      // Drop empty entries from the status map so we don't accumulate
+      // stale columns the admin tried to map then cleared.
+      const cleanMap: AsanaStatusMap = {};
+      for (const [colId, enumGid] of Object.entries(statusMap)) {
+        if (enumGid.trim()) cleanMap[colId] = enumGid.trim();
+      }
+      await setAsanaConfig({
+        enabled,
+        accessToken: token,
+        statusFieldGid: trimmedField || undefined,
+        statusMap: Object.keys(cleanMap).length > 0 ? cleanMap : undefined,
+      });
+      invalidateAsanaTokenCache();
+      invalidateAsanaConfigCache();
+      setAccessToken("");
+      setHasExistingToken(Boolean(token));
+      setStatusMap(cleanMap);
+      setSaved(true);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    setError(null);
+    setSaved(false);
+    setTestResult(null);
+    setTesting(true);
+    try {
+      const token = accessToken || (await resolveTokenForSave());
+      if (!token) {
+        setError("No token to test. Paste one above first.");
+        setTesting(false);
+        return;
+      }
+      const me = await getMe(token);
+      setTestResult(me.email ? `Signed in as ${me.email}` : `Signed in as ${me.name ?? me.gid}`);
+    } catch (err) {
+      if (err instanceof AsanaApiError) {
+        setError(`Asana rejected the token (HTTP ${err.status}).`);
+      } else {
+        setError((err as Error).message);
+      }
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  function updateMapEntry(columnId: string, enumGid: string) {
+    setSaved(false);
+    setStatusMap((prev) => ({ ...prev, [columnId]: enumGid }));
+  }
+
+  return (
+    <div className="card p-5 mt-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Plug className="h-4 w-4 text-surface-500 dark:text-surface-400" />
+        <h2 className="text-sm font-semibold">Asana connector</h2>
+      </div>
+
+      <p className="text-sm text-surface-500 mb-3 dark:text-surface-400">
+        Link Kanban tickets to Asana tasks. When linked, the ticket's comments
+        come straight from the Asana task (and posting from here writes back as
+        a story). Generate a Personal Access Token in{" "}
+        <a
+          href="https://app.asana.com/0/my-apps"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline dark:text-blue-400"
+        >
+          Asana → Developer console
+        </a>
+        . The token is stored alongside other admin config, readable by any
+        signed-in team member.
+      </p>
+
+      {loading ? (
+        <p className="text-sm text-surface-500 dark:text-surface-400">Loading current config…</p>
+      ) : (
+        <div className="space-y-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => {
+                setEnabled(e.target.checked);
+                setSaved(false);
+                setError(null);
+              }}
+            />
+            <span>Enable the Asana connector</span>
+          </label>
+
+          <div>
+            <label className="label" htmlFor="asana-token">
+              Default Access Token
+            </label>
+            <input
+              id="asana-token"
+              className="input"
+              type="password"
+              value={accessToken}
+              onChange={(e) => {
+                setAccessToken(e.target.value);
+                setSaved(false);
+                setError(null);
+                setTestResult(null);
+              }}
+              placeholder={
+                hasExistingToken
+                  ? "•••••••• (set — leave blank to keep)"
+                  : "2/1234567890123/4567890123456:abcdef…"
+              }
+              autoComplete="off"
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={handleTest}
+                disabled={testing}
+              >
+                {testing ? "Testing…" : "Test connection"}
+              </button>
+              {testResult && (
+                <span className="text-xs text-emerald-700 dark:text-emerald-300">{testResult}</span>
+              )}
+            </div>
+          </div>
+
+          <details className="mt-2">
+            <summary className="cursor-pointer text-sm text-surface-700 dark:text-surface-200">
+              Status sync (optional)
+            </summary>
+            <div className="mt-3 space-y-3 rounded-lg bg-surface-50 p-3 dark:bg-surface-800/50">
+              <p className="text-xs text-surface-500 dark:text-surface-400">
+                When a linked ticket crosses a column listed below, the Kanban
+                writes the matching Asana custom-field enum value onto the task.
+                Leave a column blank to skip it.
+              </p>
+
+              <div>
+                <label className="label" htmlFor="asana-field-gid">
+                  Custom field GID
+                </label>
+                <input
+                  id="asana-field-gid"
+                  className="input"
+                  value={statusFieldGid}
+                  onChange={(e) => {
+                    setStatusFieldGid(e.target.value);
+                    setSaved(false);
+                  }}
+                  placeholder="1210640677028875"
+                />
+                <p className="text-xs text-surface-500 mt-1 dark:text-surface-400">
+                  Single-select custom field. Find the GID in the Asana web UI
+                  URL when editing the field, or via{" "}
+                  <code className="text-[10px]">GET /custom_fields/&lt;id&gt;</code>.
+                </p>
+              </div>
+
+              {workflow?.columns?.length ? (
+                <div className="space-y-2">
+                  {workflow.columns.map((col) => (
+                    <div key={col.id} className="grid grid-cols-3 items-center gap-2">
+                      <span className="text-xs text-surface-700 dark:text-surface-200 truncate">
+                        {col.name}
+                      </span>
+                      <input
+                        className="input col-span-2 text-xs"
+                        value={statusMap[col.id] ?? ""}
+                        onChange={(e) => updateMapEntry(col.id, e.target.value)}
+                        placeholder="Asana enum value GID"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-surface-500 dark:text-surface-400">
+                  Define workflow columns above first.
+                </p>
+              )}
+            </div>
+          </details>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-sm dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
+              {error}
+            </div>
+          )}
+          {saved && !error && (
+            <div className="rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-2 text-sm dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-700/50">
+              Asana config saved.
+            </div>
+          )}
+
+          <div className="flex items-center justify-end">
+            <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+              <Save className="h-4 w-4" />
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

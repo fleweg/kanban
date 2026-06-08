@@ -5,6 +5,8 @@ import { TicketModal } from "../tickets/TicketModal";
 import { reorderTicket } from "../../services/tickets";
 import { autoProgressForStatus, compareTickets, computeNewOrder } from "../../lib/utils";
 import { useTicketOptimistic } from "../../hooks/useTicketOptimistic";
+import { useAsanaConfig } from "../../hooks/useAsanaConfig";
+import { syncAsanaStatusForTicket } from "../../lib/asanaStatusSync";
 import type { Ticket, Workflow } from "../../types";
 
 interface KanbanBoardProps {
@@ -14,6 +16,7 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({ workflow, tickets, sprintId }: KanbanBoardProps) {
+  const asanaConfig = useAsanaConfig();
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [creatingInColumn, setCreatingInColumn] = useState<string | null>(null);
   // Optimistic moves so drops don't flash back to the source column
@@ -61,6 +64,18 @@ export function KanbanBoard({ workflow, tickets, sprintId }: KanbanBoardProps) {
         ...(crossingColumn ? { status: destination.droppableId } : {}),
         ...(autoProgress !== null ? { progress: autoProgress } : {}),
       });
+      // Mirror the column change onto Asana when the ticket is linked.
+      // Fire-and-forget so a network blip doesn't roll the drop back.
+      if (crossingColumn) {
+        const dragged = tickets.find((t) => t.id === draggableId);
+        if (dragged?.asanaGid) {
+          syncAsanaStatusForTicket(
+            dragged.asanaGid,
+            destination.droppableId,
+            asanaConfig,
+          ).catch((e) => console.warn("Asana status sync failed:", e));
+        }
+      }
     } catch (err) {
       console.error(err);
       // Revert immediately so the UI snaps back to the server view.

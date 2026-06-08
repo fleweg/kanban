@@ -125,6 +125,7 @@ export function EpicsPage() {
         onClose={() => setEditing(null)}
         ticket={editing}
         workflow={workflow}
+        onSwitchTicket={(child) => setEditing(child)}
       />
     </div>
   );

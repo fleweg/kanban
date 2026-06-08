@@ -13,4 +13,5 @@ export const ensureSelfUserRecord = impl.ensureSelfUserRecord;
 export const setUserRole = impl.setUserRole;
 export const setUserDisabled = impl.setUserDisabled;
 export const setUserTeams = impl.setUserTeams;
+export const setSelfAsanaToken = impl.setSelfAsanaToken;
 export const deleteUserRecord = impl.deleteUserRecord;

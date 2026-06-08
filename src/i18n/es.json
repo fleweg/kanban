@@ -149,5 +149,64 @@
   },
   "tickets": {
     "createdAgo": "Creado {{age}}"
+  },
+  "profile": {
+    "title": "Tu perfil",
+    "subtitle": "Gestiona tu avatar — lo que ven otros miembros junto a tu nombre.",
+    "done": "Hecho",
+    "avatar": {
+      "upload": "Subir avatar",
+      "replace": "Reemplazar",
+      "remove": "Eliminar",
+      "hint": "JPG / PNG hasta {{mb}} MB. Redimensionamos y recortamos en cuadrado automáticamente."
+    },
+    "password": {
+      "title": "Cambiar contraseña",
+      "current": "Contraseña actual",
+      "new": "Nueva contraseña",
+      "confirm": "Confirmar nueva contraseña",
+      "submit": "Actualizar contraseña",
+      "submitting": "Actualizando…",
+      "cancel": "Cancelar",
+      "success": "Contraseña actualizada.",
+      "show": "Mostrar contraseñas",
+      "hide": "Ocultar contraseñas",
+      "errors": {
+        "missing": "Los tres campos son obligatorios.",
+        "tooShort": "La nueva contraseña debe tener al menos {{min}} caracteres.",
+        "mismatch": "La nueva contraseña y la confirmación no coinciden.",
+        "invalidCurrent": "La contraseña actual es incorrecta.",
+        "generic": "No se pudo actualizar la contraseña."
+      }
+    },
+    "asana": {
+      "title": "Token de Asana personal",
+      "token": "Personal Access Token",
+      "show": "Mostrar",
+      "hide": "Ocultar",
+      "test": "Probar conexión",
+      "testing": "Probando…",
+      "testOk": "Conectado como {{who}}",
+      "submit": "Guardar token",
+      "submitting": "Guardando…",
+      "clear": "Eliminar token personal",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (definido — dejar vacío para mantener)"
+      },
+      "status": {
+        "configured": "Tu token personal de Asana está definido. Los comentarios y cambios de estado publicados desde el Kanban aparecerán bajo tu identidad de Asana.",
+        "fallback": "Aún no hay token personal definido. Las publicaciones usan el token Asana por defecto del equipo hasta que guardes el tuyo."
+      },
+      "success": {
+        "saved": "Token personal de Asana guardado.",
+        "cleared": "Token personal eliminado. Volviendo al token por defecto del equipo."
+      },
+      "errors": {
+        "missing": "Pega primero un Personal Access Token.",
+        "invalid": "Asana rechazó este token (401).",
+        "generic": "No se pudo guardar el token de Asana."
+      }
+    }
   }
 }

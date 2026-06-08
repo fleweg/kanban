@@ -3,6 +3,7 @@ import type { User as FirebaseUser } from "firebase/auth";
 import { subscribeToAuth, signIn, signOut } from "../services/auth";
 import { ensureSelfUserRecord, USER_ROLES } from "../services/users";
 import { getAdminEmail } from "../services/firebaseClient";
+import { setActiveUserAsanaToken } from "../services/asana/client";
 import type { UserRecord, UserRole } from "../types";
 
 interface AuthValue {
@@ -31,6 +32,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!fbUser) {
         setUser(null);
         setRecord(null);
+        // Asana client cache: drop the per-user PAT so a subsequent
+        // login (or anonymous-context call before login) doesn't keep
+        // using the previous user's token.
+        setActiveUserAsanaToken(null);
         setLoading(false);
         return;
       }
@@ -50,6 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return unsub;
   }, []);
+
+  // Sync the active user's personal Asana PAT into the asana/client
+  // cache whenever the record changes (login, self-update via Profile,
+  // or admin overwrite). Null/empty clears the cache so the global
+  // team-wide PAT takes over for this user.
+  useEffect(() => {
+    setActiveUserAsanaToken(record?.asanaAccessToken ?? null);
+  }, [record?.asanaAccessToken]);
 
   const value = useMemo<AuthValue>(() => {
     const email = (user?.email ?? "").toLowerCase();
