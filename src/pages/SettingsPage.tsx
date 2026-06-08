@@ -406,7 +406,7 @@ function AsanaSettings() {
 
           <div>
             <label className="label" htmlFor="asana-token">
-              Personal Access Token
+              Default Access Token
             </label>
             <input
               id="asana-token"

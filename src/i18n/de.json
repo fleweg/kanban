@@ -149,5 +149,64 @@
   },
   "tickets": {
     "createdAgo": "Erstellt {{age}}"
+  },
+  "profile": {
+    "title": "Ihr Profil",
+    "subtitle": "Verwalten Sie Ihren Avatar — was andere Teammitglieder neben Ihrem Namen sehen.",
+    "done": "Fertig",
+    "avatar": {
+      "upload": "Avatar hochladen",
+      "replace": "Ersetzen",
+      "remove": "Entfernen",
+      "hint": "JPG / PNG bis zu {{mb}} MB. Wir verkleinern und schneiden automatisch quadratisch zu."
+    },
+    "password": {
+      "title": "Passwort ändern",
+      "current": "Aktuelles Passwort",
+      "new": "Neues Passwort",
+      "confirm": "Neues Passwort bestätigen",
+      "submit": "Passwort aktualisieren",
+      "submitting": "Aktualisierung…",
+      "cancel": "Abbrechen",
+      "success": "Passwort aktualisiert.",
+      "show": "Passwörter anzeigen",
+      "hide": "Passwörter verbergen",
+      "errors": {
+        "missing": "Alle drei Felder sind erforderlich.",
+        "tooShort": "Neues Passwort muss mindestens {{min}} Zeichen haben.",
+        "mismatch": "Neues Passwort und Bestätigung stimmen nicht überein.",
+        "invalidCurrent": "Aktuelles Passwort ist falsch.",
+        "generic": "Passwort konnte nicht aktualisiert werden."
+      }
+    },
+    "asana": {
+      "title": "Persönliches Asana-Token",
+      "token": "Personal Access Token",
+      "show": "Anzeigen",
+      "hide": "Verbergen",
+      "test": "Verbindung testen",
+      "testing": "Test läuft…",
+      "testOk": "Angemeldet als {{who}}",
+      "submit": "Token speichern",
+      "submitting": "Speichern…",
+      "clear": "Persönliches Token löschen",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (gesetzt — leer lassen zum Behalten)"
+      },
+      "status": {
+        "configured": "Ihr persönliches Asana-Token ist gesetzt. Aus dem Kanban gepostete Kommentare und Status-Updates erscheinen unter Ihrer Asana-Identität.",
+        "fallback": "Noch kein persönliches Token gesetzt. Beiträge verwenden das Standard-Token des Teams, bis Sie Ihr eigenes speichern."
+      },
+      "success": {
+        "saved": "Persönliches Asana-Token gespeichert.",
+        "cleared": "Persönliches Token entfernt. Rückfall auf das Team-Standard."
+      },
+      "errors": {
+        "missing": "Fügen Sie zuerst ein Personal Access Token ein.",
+        "invalid": "Asana hat dieses Token abgelehnt (401).",
+        "generic": "Asana-Token konnte nicht gespeichert werden."
+      }
+    }
   }
 }

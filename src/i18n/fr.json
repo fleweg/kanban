@@ -149,5 +149,64 @@
   },
   "tickets": {
     "createdAgo": "Créé {{age}}"
+  },
+  "profile": {
+    "title": "Votre profil",
+    "subtitle": "Gérez votre avatar — ce que les autres membres voient à côté de votre nom.",
+    "done": "Fermer",
+    "avatar": {
+      "upload": "Téléverser un avatar",
+      "replace": "Remplacer",
+      "remove": "Supprimer",
+      "hint": "JPG / PNG jusqu'à {{mb}} Mo. Nous redimensionnons et recadrons en carré automatiquement."
+    },
+    "password": {
+      "title": "Changer le mot de passe",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe",
+      "confirm": "Confirmer le nouveau mot de passe",
+      "submit": "Mettre à jour",
+      "submitting": "Mise à jour…",
+      "cancel": "Annuler",
+      "success": "Mot de passe mis à jour.",
+      "show": "Afficher les mots de passe",
+      "hide": "Masquer les mots de passe",
+      "errors": {
+        "missing": "Les trois champs sont requis.",
+        "tooShort": "Le nouveau mot de passe doit faire au moins {{min}} caractères.",
+        "mismatch": "Le nouveau mot de passe et la confirmation ne correspondent pas.",
+        "invalidCurrent": "Le mot de passe actuel est incorrect.",
+        "generic": "Impossible de mettre à jour le mot de passe."
+      }
+    },
+    "asana": {
+      "title": "Jeton Asana personnel",
+      "token": "Personal Access Token",
+      "show": "Afficher",
+      "hide": "Masquer",
+      "test": "Tester la connexion",
+      "testing": "Test en cours…",
+      "testOk": "Connecté en tant que {{who}}",
+      "submit": "Enregistrer le jeton",
+      "submitting": "Enregistrement…",
+      "clear": "Supprimer le jeton personnel",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (défini — laisser vide pour conserver)"
+      },
+      "status": {
+        "configured": "Votre jeton Asana personnel est défini. Les commentaires et changements de statut postés depuis le Kanban apparaîtront avec votre identité Asana.",
+        "fallback": "Aucun jeton personnel défini. Les publications utilisent le jeton Asana par défaut de l'équipe jusqu'à ce que vous enregistriez le vôtre."
+      },
+      "success": {
+        "saved": "Jeton Asana personnel enregistré.",
+        "cleared": "Jeton personnel supprimé. Retour au jeton par défaut de l'équipe."
+      },
+      "errors": {
+        "missing": "Collez d'abord un Personal Access Token.",
+        "invalid": "Asana a refusé ce jeton (401).",
+        "generic": "Impossible d'enregistrer le jeton Asana."
+      }
+    }
   }
 }

@@ -149,5 +149,64 @@
   },
   "tickets": {
     "createdAgo": "Aangemaakt {{age}}"
+  },
+  "profile": {
+    "title": "Je profiel",
+    "subtitle": "Beheer je avatar — wat andere teamleden naast je naam zien.",
+    "done": "Klaar",
+    "avatar": {
+      "upload": "Avatar uploaden",
+      "replace": "Vervangen",
+      "remove": "Verwijderen",
+      "hint": "JPG / PNG tot {{mb}} MB. We verkleinen en bijsnijden automatisch tot een vierkant."
+    },
+    "password": {
+      "title": "Wachtwoord wijzigen",
+      "current": "Huidig wachtwoord",
+      "new": "Nieuw wachtwoord",
+      "confirm": "Nieuw wachtwoord bevestigen",
+      "submit": "Wachtwoord bijwerken",
+      "submitting": "Bijwerken…",
+      "cancel": "Annuleren",
+      "success": "Wachtwoord bijgewerkt.",
+      "show": "Wachtwoorden tonen",
+      "hide": "Wachtwoorden verbergen",
+      "errors": {
+        "missing": "Alle drie de velden zijn verplicht.",
+        "tooShort": "Nieuw wachtwoord moet minimaal {{min}} tekens hebben.",
+        "mismatch": "Nieuw wachtwoord en bevestiging komen niet overeen.",
+        "invalidCurrent": "Huidig wachtwoord is onjuist.",
+        "generic": "Wachtwoord kon niet worden bijgewerkt."
+      }
+    },
+    "asana": {
+      "title": "Persoonlijk Asana-token",
+      "token": "Personal Access Token",
+      "show": "Tonen",
+      "hide": "Verbergen",
+      "test": "Verbinding testen",
+      "testing": "Testen…",
+      "testOk": "Aangemeld als {{who}}",
+      "submit": "Token opslaan",
+      "submitting": "Opslaan…",
+      "clear": "Persoonlijk token verwijderen",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (ingesteld — leeg laten om te behouden)"
+      },
+      "status": {
+        "configured": "Je persoonlijke Asana-token is ingesteld. Vanuit Kanban geplaatste reacties en statuswijzigingen verschijnen onder jouw Asana-identiteit.",
+        "fallback": "Nog geen persoonlijk token ingesteld. Posts gebruiken het standaard Asana-token van het team totdat je je eigen opslaat."
+      },
+      "success": {
+        "saved": "Persoonlijk Asana-token opgeslagen.",
+        "cleared": "Persoonlijk token verwijderd. Terug naar de teamstandaard."
+      },
+      "errors": {
+        "missing": "Plak eerst een Personal Access Token.",
+        "invalid": "Asana heeft dit token afgewezen (401).",
+        "generic": "Kon Asana-token niet opslaan."
+      }
+    }
   }
 }

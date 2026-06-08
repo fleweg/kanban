@@ -12,20 +12,51 @@ import { getAsanaConfig } from "../asanaConfig";
 
 const ASANA_BASE = "https://app.asana.com/api/1.0";
 
-// One module-level cache of the PAT so the polling loops don't pay
-// the Firestore/SQLite round-trip on every tick. Invalidated when the
-// Settings page saves a new config.
-let cachedToken: string | null | undefined;
+// Two-level PAT cache.
+//   - `cachedUserToken` is the active user's personal PAT (set by
+//     AuthContext via setActiveUserAsanaToken whenever the live user
+//     record's `asanaAccessToken` changes, and cleared on signout).
+//   - `cachedGlobalToken` is the team-wide default PAT from
+//     `config/asana`, lazily loaded the first time we need it.
+//
+// Resolution order in readToken():
+//   1. cachedUserToken (when truthy)
+//   2. cachedGlobalToken (fallback when the user hasn't set their own)
+//   3. null  → caller raises AsanaApiError("connector disabled or PAT
+//              not configured")
+//
+// `undefined` means "not yet resolved" — distinct from `null` which is
+// "we looked but there's no token".
+let cachedUserToken: string | null | undefined;
+let cachedGlobalToken: string | null | undefined;
 
+// Bust the global cache. Called from the Settings page right after a
+// save so the next API call picks up the new team-wide default.
 export function invalidateAsanaTokenCache(): void {
-  cachedToken = undefined;
+  cachedGlobalToken = undefined;
+}
+
+// Set/clear the active user's personal PAT. Called from AuthContext
+// whenever `record.asanaAccessToken` changes (login, self-update via
+// Profile modal, signout). Pass `null` to clear — the global default
+// then takes over on the next call.
+export function setActiveUserAsanaToken(token: string | null): void {
+  cachedUserToken = token && token.trim() ? token.trim() : null;
+}
+
+async function readGlobalToken(): Promise<string | null> {
+  if (cachedGlobalToken !== undefined) return cachedGlobalToken;
+  const cfg = await getAsanaConfig();
+  cachedGlobalToken = cfg?.enabled && cfg.accessToken ? cfg.accessToken : null;
+  return cachedGlobalToken;
 }
 
 async function readToken(): Promise<string | null> {
-  if (cachedToken !== undefined) return cachedToken;
-  const cfg = await getAsanaConfig();
-  cachedToken = cfg?.enabled && cfg.accessToken ? cfg.accessToken : null;
-  return cachedToken;
+  // Prefer the per-user PAT — that's how comments / status writes get
+  // attributed to the real user on the Asana side. Only fall back to
+  // the global PAT when the user hasn't configured their own.
+  if (cachedUserToken) return cachedUserToken;
+  return readGlobalToken();
 }
 
 // Raised on any non-2xx response. The `.status` field lets callers
@@ -212,17 +243,27 @@ export async function listStories(gid: string): Promise<AsanaStory[]> {
   return all;
 }
 
-// Posts an HTML comment story on the task. Asana requires the body to
-// be wrapped in <body>…</body> and supports a restricted tag set
-// (strong, em, u, s, code, pre, ol, ul, li, blockquote, h1, h2, hr, a,
-// img). The caller is responsible for sanitization — see
-// `tiptapToAsanaHtml` in ./html.ts.
-export async function postStory(gid: string, htmlBody: string): Promise<AsanaStory> {
+// Posts a comment story on the task. By default sends plain text via
+// the `text` field — Asana then renders newlines and links natively.
+// When `htmlBody` is supplied (rich-text path), it is wrapped in
+// <body>…</body> and sent via `html_text` instead. Asana's html_text
+// only accepts a restricted tag set (strong, em, u, s, code, pre, ol,
+// ul, li, blockquote, h1, h2, hr, a, img) — anything else is stripped
+// or, in the worst case, makes Asana fall back to literal rendering.
+// Never mix the two fields in one call.
+export async function postStory(
+  gid: string,
+  content: { text: string } | { htmlBody: string },
+): Promise<AsanaStory> {
+  const data =
+    "text" in content
+      ? { text: content.text }
+      : { html_text: `<body>${content.htmlBody}</body>` };
   const res = await callAsana<AsanaItemResponse<AsanaStory>>(
     `/tasks/${encodeURIComponent(gid)}/stories`,
     {
       method: "POST",
-      body: JSON.stringify({ data: { html_text: `<body>${htmlBody}</body>` } }),
+      body: JSON.stringify({ data }),
     },
   );
   return res.data;

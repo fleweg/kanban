@@ -1,5 +1,5 @@
 import type { DraggableProvidedDragHandleProps } from "@hello-pangea/dnd";
-import { CheckSquare, Clock, GripVertical, Link2, MessageSquare, MoreHorizontal, Paperclip } from "lucide-react";
+import { CheckSquare, Clock, GripVertical, Link2, MessageSquare, Paperclip } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn, checklistProgress, formatAge, formatAgeCompact, getPriority, htmlToPlainText } from "../../lib/utils";
 import { useAppData } from "../../context/AppDataContext";
@@ -89,84 +89,83 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
               <span className="text-[10px] tabular-nums text-surface-500 dark:text-surface-400">{progress}%</span>
             </div>
           )}
-          <div className="mt-2.5 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={cn("chip", priority.color)}>{priority.label}</span>
-              {commentCount > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
-                  title={`${commentCount} comment${commentCount > 1 ? "s" : ""}`}
-                >
-                  <MessageSquare className="h-3 w-3" />
-                  {commentCount}
-                </span>
-              )}
-              {checklistTotal > 0 && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 text-[11px] tabular-nums",
-                    checklistComplete
-                      ? "text-emerald-600 dark:text-emerald-400"
-                      : "text-surface-500 dark:text-surface-400",
-                  )}
-                  title={`Checklist · ${checklistDone}/${checklistTotal} done`}
-                >
-                  <CheckSquare className="h-3 w-3" />
-                  {checklistDone}/{checklistTotal}
-                </span>
-              )}
-              {attachmentCount > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
-                  title={`${attachmentCount} attachment${attachmentCount > 1 ? "s" : ""}`}
-                >
-                  <Paperclip className="h-3 w-3" />
-                  {attachmentCount}
-                </span>
-              )}
-              {(ticket.dependencies?.length ?? 0) > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
-                  title={`Depends on ${ticket.dependencies?.length} ticket${(ticket.dependencies?.length ?? 0) > 1 ? "s" : ""}`}
-                >
-                  <Link2 className="h-3 w-3" />
-                  {ticket.dependencies?.length}
-                </span>
-              )}
-              {ticket.asanaGid && (
-                <span
-                  className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-300"
-                  title={`Linked to Asana task ${ticket.asanaGid}`}
-                  onClick={(e) => {
-                    if (!ticket.asanaPermalinkUrl) return;
-                    e.stopPropagation();
-                    window.open(ticket.asanaPermalinkUrl, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  <Link2 className="h-3 w-3" />
-                  Asana
-                </span>
-              )}
-              {ticket.createdAt && (
-                <span
-                  className="inline-flex items-center gap-1 text-[11px] text-surface-500 tabular-nums dark:text-surface-400"
-                  title={t("tickets.createdAgo", { age: formatAge(ticket.createdAt) })}
-                >
-                  <Clock className="h-3 w-3" />
-                  {formatAgeCompact(ticket.createdAt)}
-                </span>
-              )}
-            </div>
-            {assignee ? (
-              <UserAvatar user={assignee} size="sm" />
-            ) : (
-              <UnassignedAvatar size="sm" />
+          <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+            <span className={cn("chip", priority.color)}>{priority.label}</span>
+            {commentCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
+                title={`${commentCount} comment${commentCount > 1 ? "s" : ""}`}
+              >
+                <MessageSquare className="h-3 w-3" />
+                {commentCount}
+              </span>
+            )}
+            {checklistTotal > 0 && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 text-[11px] tabular-nums",
+                  checklistComplete
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-surface-500 dark:text-surface-400",
+                )}
+                title={`Checklist · ${checklistDone}/${checklistTotal} done`}
+              >
+                <CheckSquare className="h-3 w-3" />
+                {checklistDone}/{checklistTotal}
+              </span>
+            )}
+            {attachmentCount > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
+                title={`${attachmentCount} attachment${attachmentCount > 1 ? "s" : ""}`}
+              >
+                <Paperclip className="h-3 w-3" />
+                {attachmentCount}
+              </span>
+            )}
+            {(ticket.dependencies?.length ?? 0) > 0 && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"
+                title={`Depends on ${ticket.dependencies?.length} ticket${(ticket.dependencies?.length ?? 0) > 1 ? "s" : ""}`}
+              >
+                <Link2 className="h-3 w-3" />
+                {ticket.dependencies?.length}
+              </span>
+            )}
+            {ticket.asanaGid && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-blue-700 dark:text-blue-300"
+                title={`Linked to Asana task ${ticket.asanaGid}`}
+                onClick={(e) => {
+                  if (!ticket.asanaPermalinkUrl) return;
+                  e.stopPropagation();
+                  window.open(ticket.asanaPermalinkUrl, "_blank", "noopener,noreferrer");
+                }}
+              >
+                <Link2 className="h-3 w-3" />
+                Asana
+              </span>
+            )}
+            {ticket.createdAt && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-surface-500 tabular-nums dark:text-surface-400"
+                title={t("tickets.createdAgo", { age: formatAge(ticket.createdAt) })}
+              >
+                <Clock className="h-3 w-3" />
+                {formatAgeCompact(ticket.createdAt)}
+              </span>
             )}
           </div>
         </div>
-        <span className="text-surface-300 group-hover:text-surface-500 transition-colors dark:text-surface-600 dark:group-hover:text-surface-400">
-          <MoreHorizontal className="h-4 w-4" />
-        </span>
+        {/* Top-right slot — used to render a dead "…" icon, now hosts
+            the assignee avatar (or the unassigned placeholder). Keeps
+            the bottom meta row uncluttered and surfaces who's on the
+            ticket without needing to scan to the bottom-right. */}
+        {assignee ? (
+          <UserAvatar user={assignee} size="sm" />
+        ) : (
+          <UnassignedAvatar size="sm" />
+        )}
       </div>
     </div>
   );

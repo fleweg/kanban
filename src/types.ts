@@ -126,6 +126,23 @@ export interface UserRecord {
   role: UserRole;
   disabled: boolean;
   teamIds: string[];
+  // Optional avatar image hosted on the Flexweg site. `avatarPath` is
+  // the storage path inside the site (e.g. `kanban/avatars/{uid}.jpg`)
+  // — used by the delete API. `avatarUrl` is the full public URL with
+  // a `?v={uploadedAt}` cache-buster appended, so swapping the image
+  // forces every browser to refetch instead of showing the cached
+  // previous file. When both are absent the UserAvatar falls back to
+  // the deterministic-color initials disc.
+  avatarPath?: string | null;
+  avatarUrl?: string | null;
+  // Optional per-user Asana Personal Access Token. When set, the Asana
+  // client uses it for every call instead of the team-wide default
+  // stored in `config/asana` — so comments posted from the Kanban
+  // appear as the user themselves on Asana. Falls back to the global
+  // PAT (from AsanaConfig.accessToken) when null/empty. Self-writable
+  // through the Profile modal; only displayed when the connector is
+  // enabled globally.
+  asanaAccessToken?: string | null;
   createdAt?: Timestamp;
   createdBy?: string;
 }

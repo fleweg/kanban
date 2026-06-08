@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import {
   Bold,
@@ -55,6 +56,19 @@ export function RichTextEditor({ value, onChange, placeholder }: RichTextEditorP
         openOnClick: false,
         autolink: true,
         HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
+      }),
+      // Image extension keeps <img> nodes in the editor schema so
+      // Asana-linked tickets render the inline screenshots from
+      // html_notes. URLs are kept as-is (Asana hosts them on
+      // asanausercontent.com with pre-signed tokens — they're publicly
+      // viewable without auth for ~32h, the user can re-link the task
+      // to refresh URLs).
+      Image.configure({
+        inline: true,
+        allowBase64: false,
+        HTMLAttributes: {
+          class: "max-w-full h-auto rounded my-2",
+        },
       }),
       Placeholder.configure({ placeholder: placeholder ?? "" }),
     ],

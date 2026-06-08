@@ -256,5 +256,64 @@
   },
   "tickets": {
     "createdAgo": "Created {{age}}"
+  },
+  "profile": {
+    "title": "Your profile",
+    "subtitle": "Manage your avatar — what other team members see next to your name.",
+    "done": "Done",
+    "avatar": {
+      "upload": "Upload avatar",
+      "replace": "Replace",
+      "remove": "Remove",
+      "hint": "JPG / PNG up to {{mb}} MB. We resize and crop to a square automatically."
+    },
+    "password": {
+      "title": "Change password",
+      "current": "Current password",
+      "new": "New password",
+      "confirm": "Confirm new password",
+      "submit": "Update password",
+      "submitting": "Updating…",
+      "cancel": "Cancel",
+      "success": "Password updated.",
+      "show": "Show passwords",
+      "hide": "Hide passwords",
+      "errors": {
+        "missing": "All three fields are required.",
+        "tooShort": "New password must be at least {{min}} characters.",
+        "mismatch": "New password and confirmation do not match.",
+        "invalidCurrent": "Current password is incorrect.",
+        "generic": "Could not update the password."
+      }
+    },
+    "asana": {
+      "title": "Personal Asana token",
+      "token": "Personal Access Token",
+      "show": "Show",
+      "hide": "Hide",
+      "test": "Test connection",
+      "testing": "Testing…",
+      "testOk": "Signed in as {{who}}",
+      "submit": "Save token",
+      "submitting": "Saving…",
+      "clear": "Clear personal token",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (set — leave blank to keep)"
+      },
+      "status": {
+        "configured": "Your personal Asana token is set. Comments and status updates posted from the Kanban will appear under your Asana identity.",
+        "fallback": "No personal token set yet. Posts use the team's default Asana token until you save your own."
+      },
+      "success": {
+        "saved": "Personal Asana token saved.",
+        "cleared": "Personal token removed. Falling back to the team default."
+      },
+      "errors": {
+        "missing": "Paste a Personal Access Token first.",
+        "invalid": "Asana rejected this token (401).",
+        "generic": "Could not save the Asana token."
+      }
+    }
   }
 }

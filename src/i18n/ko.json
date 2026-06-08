@@ -149,5 +149,64 @@
   },
   "tickets": {
     "createdAgo": "{{age}} 생성됨"
+  },
+  "profile": {
+    "title": "내 프로필",
+    "subtitle": "아바타를 관리하세요 — 다른 팀원이 이름 옆에서 보는 이미지입니다.",
+    "done": "완료",
+    "avatar": {
+      "upload": "아바타 업로드",
+      "replace": "교체",
+      "remove": "삭제",
+      "hint": "JPG / PNG, 최대 {{mb}} MB. 자동으로 정사각형으로 잘라 크기를 조정합니다."
+    },
+    "password": {
+      "title": "비밀번호 변경",
+      "current": "현재 비밀번호",
+      "new": "새 비밀번호",
+      "confirm": "새 비밀번호 확인",
+      "submit": "비밀번호 업데이트",
+      "submitting": "업데이트 중…",
+      "cancel": "취소",
+      "success": "비밀번호가 업데이트되었습니다.",
+      "show": "비밀번호 표시",
+      "hide": "비밀번호 숨기기",
+      "errors": {
+        "missing": "세 필드를 모두 입력해야 합니다.",
+        "tooShort": "새 비밀번호는 최소 {{min}}자 이상이어야 합니다.",
+        "mismatch": "새 비밀번호와 확인이 일치하지 않습니다.",
+        "invalidCurrent": "현재 비밀번호가 올바르지 않습니다.",
+        "generic": "비밀번호를 업데이트할 수 없습니다."
+      }
+    },
+    "asana": {
+      "title": "개인 Asana 토큰",
+      "token": "Personal Access Token",
+      "show": "표시",
+      "hide": "숨기기",
+      "test": "연결 테스트",
+      "testing": "테스트 중…",
+      "testOk": "{{who}}(으)로 로그인됨",
+      "submit": "토큰 저장",
+      "submitting": "저장 중…",
+      "clear": "개인 토큰 삭제",
+      "placeholder": {
+        "empty": "2/1234567890123/4567890123456:abcdef…",
+        "existing": "•••••••• (설정됨 — 유지하려면 비워두세요)"
+      },
+      "status": {
+        "configured": "개인 Asana 토큰이 설정되었습니다. Kanban에서 게시한 댓글과 상태 업데이트가 본인의 Asana 신원으로 표시됩니다.",
+        "fallback": "아직 개인 토큰이 설정되지 않았습니다. 본인의 토큰을 저장할 때까지 게시물은 팀 기본 Asana 토큰을 사용합니다."
+      },
+      "success": {
+        "saved": "개인 Asana 토큰이 저장되었습니다.",
+        "cleared": "개인 토큰이 제거되었습니다. 팀 기본값으로 돌아갑니다."
+      },
+      "errors": {
+        "missing": "먼저 Personal Access Token을 붙여넣으세요.",
+        "invalid": "Asana가 이 토큰을 거부했습니다 (401).",
+        "generic": "Asana 토큰을 저장할 수 없습니다."
+      }
+    }
   }
 }

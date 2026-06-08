@@ -25,6 +25,9 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
       email TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
       disabled INTEGER NOT NULL DEFAULT 0,
+      avatar_path TEXT,
+      avatar_url TEXT,
+      asana_access_token TEXT,
       created_at INTEGER NOT NULL,
       created_by TEXT
     )`,
@@ -137,6 +140,8 @@ export async function ensureSchema(): Promise<void> {
   await ensureTeamIdColumn("sprints");
   await ensureGanttColumns();
   await ensureAsanaColumns();
+  await ensureAvatarColumns();
+  await ensureAsanaUserTokenColumn();
   await runTeamBackfillOnce();
 }
 
@@ -169,6 +174,30 @@ async function ensureTeamIdColumn(table: "tickets" | "sprints"): Promise<void> {
   await sqlExec(
     `ALTER TABLE ${table} ADD COLUMN team_id TEXT NOT NULL DEFAULT '${GENERAL_TEAM_ID}'`,
   );
+}
+
+// Adds the per-user Asana PAT column lazily so SQLite deployments
+// installed before this feature pick it up on next boot. Idempotent.
+async function ensureAsanaUserTokenColumn(): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(users)`);
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("asana_access_token")) {
+    await sqlExec(`ALTER TABLE users ADD COLUMN asana_access_token TEXT`);
+  }
+}
+
+// Adds the avatar columns lazily on existing users tables so the
+// migration is idempotent — re-running ensureSchema() on a deployment
+// installed before this feature won't fail.
+async function ensureAvatarColumns(): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(users)`);
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("avatar_path")) {
+    await sqlExec(`ALTER TABLE users ADD COLUMN avatar_path TEXT`);
+  }
+  if (!have.has("avatar_url")) {
+    await sqlExec(`ALTER TABLE users ADD COLUMN avatar_url TEXT`);
+  }
 }
 
 // Adds the Asana-connector columns lazily on existing tickets tables.

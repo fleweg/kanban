@@ -11,7 +11,7 @@ Static React + Vite SPA written in **TypeScript** (`strict` mode). Two interchan
 
 No Cloud Functions, no Firebase Storage. Implements a backlog, single-active-sprint workflow, and a configurable Kanban board.
 
-The built `dist/` directory is **committed to the repo** and is the deploy artifact — hosting only requires serving static files (no npm/Node on the server, no SPA fallback config). [vite.config.ts](vite.config.ts) sets `base: "./"` so all asset paths are relative; the SPA uses `HashRouter` so routes live in the URL fragment (`#/sprint`, `#/backlog`, …) and any host that simply serves `index.html` works — including subpaths and `file://`. After any source change you must `npm run build` and commit the regenerated `dist/`.
+The deploy artifact is the built `dist/` directory but **it is NOT committed** — `dist` is in `.gitignore`. Build it locally with `npm run build` and upload it to the host yourself. [vite.config.ts](vite.config.ts) sets `base: "./"` so all asset paths are relative; the SPA uses `HashRouter` so routes live in the URL fragment (`#/sprint`, `#/backlog`, …) and any host that simply serves `index.html` works — including subpaths and `file://`. After any source change, run `npm run build` and re-upload `dist/`; do not try to `git add dist/`.
 
 ## Commands
 
@@ -263,6 +263,16 @@ Tickets carry `createdBy` (immutable, set on creation) and `assigneeId` (nullabl
 [src/components/users/UserAvatar.tsx](src/components/users/UserAvatar.tsx) renders a colored disc with initials. Color comes from a deterministic hash of the `uid` (`colorClassesFor` in [src/lib/utils.ts](src/lib/utils.ts)) — same user → same color everywhere. Initials are derived from the email's local part (no `displayName` field today; easy to add later by reading `record.displayName ?? record.email`). [UserPicker.tsx](src/components/users/UserPicker.tsx) is a bare `<select>` over active users with an "Unassigned" first option.
 
 The bootstrap admin auto-creates their own `users/{uid}` record with `role: "user"` like everyone else (otherwise they couldn't be picked as an assignee). Their effective admin status still flows from the email match in `.env` + rules — the role field is irrelevant for the bootstrap admin. The Users page detects them by email and shows a "Bootstrap" badge, treats them as Admin, and disables destructive actions on their row.
+
+#### Uploaded avatar (overrides the initials disc)
+
+Users can upload a personal avatar via the ProfileModal (click the identity chip in the Topbar / Sidebar). The image is browser-resized to a 256×256 JPEG via [src/lib/imageResize.ts](src/lib/imageResize.ts) (canvas + centre crop, quality 0.85), then uploaded to the Flexweg site at `avatars/{uid}.jpg` (path prefixed by `withAppBase` so it lands inside the kanban's install folder). Stored on the user record as `{avatarPath, avatarUrl}` where the URL carries a `?v={uploadedAt}` cache-buster so a replacement is picked up immediately by every browser.
+
+[src/components/users/UserAvatar.tsx](src/components/users/UserAvatar.tsx) renders `<img src={avatarUrl}>` when present; falls back to the colored-initials disc on missing URL or on `onError` (e.g. file deleted on Flexweg, network issue). The `getUserById` reactive lookup means uploading from the modal updates every avatar in the app within the next snapshot/poll tick — no manual refresh.
+
+Threat model: avatar URLs are public static assets on Flexweg (same posture as ticket attachments). Acceptable for an internal-team kanban; not suitable for public exposure. The Flexweg API key is read through `getFlexwegConfig()` like the attachments service.
+
+Firestore rules allow self-update of `users/{uid}` as long as `role`, `disabled` and `email` are unchanged — see the rules block in [README.md](README.md). SQLite mode has no row-level auth; the discipline is client-side (`uploadSelfAvatar(uid, file)` is always called with the auth-context's current `uid`).
 
 ### Comments
 

@@ -2,9 +2,12 @@ import { NavLink } from "react-router-dom";
 import { BarChart3, Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
+import { useAppData } from "../../context/AppDataContext";
+import { useProfileModal } from "../../context/ProfileModalContext";
 import { useTheme } from "../../context/ThemeContext";
 import { signOut } from "../../services/auth";
 import { TeamSwitcher } from "../teams/TeamSwitcher";
+import { UserAvatar } from "../users/UserAvatar";
 
 interface NavItem {
   to: string;
@@ -24,9 +27,12 @@ const baseItems: NavItem[] = [
 
 export function Topbar() {
   const { user, isAdmin } = useAuth();
+  const { getUserById } = useAppData();
+  const { open: openProfile } = useProfileModal();
   const { theme, toggleTheme } = useTheme();
   const items: NavItem[] = isAdmin ? [...baseItems, { to: "/users", label: "Users", icon: Users }] : baseItems;
   const isDark = theme === "dark";
+  const liveRecord = user ? getUserById(user.uid) : null;
 
   return (
     <header className="md:hidden sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-surface-200 dark:bg-surface-900/80 dark:border-surface-800">
@@ -40,9 +46,22 @@ export function Topbar() {
         <div className="flex items-center gap-1">
           <TeamSwitcher compact className="mr-1" />
           {user && (
-            <span className="text-xs text-surface-500 truncate max-w-[120px] dark:text-surface-400">
-              {user.email}
-            </span>
+            <button
+              type="button"
+              onClick={openProfile}
+              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+              title="Open profile"
+            >
+              <UserAvatar
+                user={liveRecord ?? null}
+                uid={user.uid}
+                email={user.email ?? undefined}
+                size="sm"
+              />
+              <span className="text-xs text-surface-500 truncate max-w-[100px] dark:text-surface-400">
+                {user.email}
+              </span>
+            </button>
           )}
           <button
             type="button"
