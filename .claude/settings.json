@@ -12,7 +12,10 @@
       "Edit(/.claude/skills/kanban/**)",
       "WebFetch(domain:developers.asana.com)",
       "Bash(git check-ignore *)",
-      "Bash(awk '$1 == \"??\" {print $2}')"
+      "Bash(awk '$1 == \"??\" {print $2}')",
+      "Bash(git ls-tree *)",
+      "Bash(npm outdated *)",
+      "Bash(npm update *)"
     ],
     "additionalDirectories": [
       "/Users/fredleaux/Sites/flexweg/kanban/.claude/skills"
