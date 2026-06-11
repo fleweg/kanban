@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cn, colorClassesFor, initialsFromEmail } from "../../lib/utils";
+import { cn, colorClassesFor, displayNameOf, initialsFor } from "../../lib/utils";
 import type { UserRecord } from "../../types";
 
 type AvatarSize = "xs" | "sm" | "md" | "lg" | "xl" | "2xl";
@@ -39,9 +39,13 @@ interface UserAvatarProps {
 export function UserAvatar({ user, uid, email, size = "sm", className, title }: UserAvatarProps) {
   const resolvedUid = user?.id ?? uid ?? email ?? "";
   const resolvedEmail = user?.email ?? email ?? "";
-  const initials = initialsFromEmail(resolvedEmail);
+  // Combine the user record (when supplied) with the loose
+  // email/uid props so initialsFor / displayNameOf can lean on
+  // displayName when available and fall back to email otherwise.
+  const surface = user ?? { email: resolvedEmail, displayName: null };
+  const initials = initialsFor(surface);
   const color = colorClassesFor(resolvedUid);
-  const tooltip = title ?? resolvedEmail ?? "Unknown user";
+  const tooltip = title ?? (displayNameOf(surface) || "Unknown user");
   const avatarUrl = user?.avatarUrl ?? null;
   const [imgFailed, setImgFailed] = useState(false);
 

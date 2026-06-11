@@ -5,6 +5,7 @@ import { CommentComposer } from "./CommentComposer";
 import { subscribeToComments } from "../../services/comments";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
+import { displayNameOf } from "../../lib/utils";
 import type { TicketComment } from "../../types";
 
 interface GroupedComment {
@@ -120,7 +121,7 @@ export function CommentList({ ticketId }: { ticketId: string }) {
           ticketId={ticketId}
           currentUser={user}
           replyingTo={replyingTo}
-          replyAuthorEmail={replyingTo ? getUserById(replyingTo.authorId)?.email ?? "" : ""}
+          replyAuthorEmail={replyingTo ? displayNameOf(getUserById(replyingTo.authorId)) : ""}
           onCancelReply={() => setReplyingTo(null)}
           onPosted={() => setReplyingTo(null)}
         />

@@ -122,3 +122,20 @@ export async function setSelfAsanaToken(
   const normalized = token && token.trim() ? token.trim() : null;
   return updateDoc(userDoc(uid), { asanaAccessToken: normalized });
 }
+
+// Self-set the optional human-readable display name. Pass null/empty
+// to clear (the UI then falls back to the email via displayNameOf()).
+// `setDoc(..., { merge: true })` handles both cases in one call:
+//   - existing doc → behaves like updateDoc, only touches displayName
+//   - missing doc (bootstrap admin who hasn't logged in yet) → creates
+//     a stub with displayName + the merge applies to it
+// Self-update is gated by the Firestore rule that allows changes only
+// when role/disabled/email stay the same — touching displayName alone
+// satisfies that.
+export async function setSelfDisplayName(
+  uid: string,
+  name: string | null,
+): Promise<void> {
+  const normalized = name && name.trim() ? name.trim() : null;
+  return setDoc(userDoc(uid), { displayName: normalized }, { merge: true });
+}

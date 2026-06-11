@@ -150,10 +150,39 @@
   "tickets": {
     "createdAgo": "Criado {{age}}"
   },
+  "tags": {
+    "picker": {
+      "placeholder": "Adicionar tags…",
+      "create": "Criar \"{{name}}\""
+    }
+  },
+  "sprint": {
+    "filter": {
+      "title": "Filtrar tickets por responsável",
+      "all": "Todos os tickets",
+      "me": "Os meus tickets",
+      "emptyTitle": "Nenhum ticket corresponde a este filtro",
+      "emptyDescription": "Nada atribuído dessa forma neste sprint.",
+      "clear": "Limpar filtro"
+    }
+  },
   "profile": {
     "title": "O seu perfil",
     "subtitle": "Faça a gestão do seu avatar — o que outros membros veem ao lado do seu nome.",
     "done": "Concluído",
+    "displayName": {
+      "title": "Nome a exibir",
+      "hint": "Mostrado em qualquer lugar onde o seu nome aparece no Kanban. Deixe vazio para usar o seu email.",
+      "placeholder": "Jane Doe",
+      "submit": "Guardar",
+      "submitting": "A guardar…",
+      "cancel": "Cancelar",
+      "success": "Nome a exibir atualizado.",
+      "errors": {
+        "tooLong": "Nome a exibir deve ter no máximo {{max}} caracteres.",
+        "generic": "Não foi possível atualizar o nome a exibir."
+      }
+    },
     "avatar": {
       "upload": "Carregar avatar",
       "replace": "Substituir",

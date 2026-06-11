@@ -25,6 +25,7 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
       email TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
       disabled INTEGER NOT NULL DEFAULT 0,
+      display_name TEXT,
       avatar_path TEXT,
       avatar_url TEXT,
       asana_access_token TEXT,
@@ -100,6 +101,18 @@ export const SCHEMA_STATEMENTS: Array<{ sql: string; params?: unknown[] }> = [
   },
   { sql: `CREATE INDEX IF NOT EXISTS idx_comments_ticket ON comments(ticket_id)` },
 
+  // -- tags ------------------------------------------------------------
+  {
+    sql: `CREATE TABLE IF NOT EXISTS tags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      created_by TEXT
+    )`,
+  },
+  { sql: `CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name)` },
+
   // -- teams -----------------------------------------------------------
   {
     sql: `CREATE TABLE IF NOT EXISTS teams (
@@ -142,6 +155,8 @@ export async function ensureSchema(): Promise<void> {
   await ensureAsanaColumns();
   await ensureAvatarColumns();
   await ensureAsanaUserTokenColumn();
+  await ensureDisplayNameColumn();
+  await ensureTagIdsColumn();
   await runTeamBackfillOnce();
 }
 
@@ -174,6 +189,28 @@ async function ensureTeamIdColumn(table: "tickets" | "sprints"): Promise<void> {
   await sqlExec(
     `ALTER TABLE ${table} ADD COLUMN team_id TEXT NOT NULL DEFAULT '${GENERAL_TEAM_ID}'`,
   );
+}
+
+// Adds the tag_ids JSON column on tickets lazily so SQLite deployments
+// installed before this feature pick it up on next boot. The column
+// stores a JSON-encoded string array (same pattern as `dependencies`).
+// Idempotent.
+async function ensureTagIdsColumn(): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(tickets)`);
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("tag_ids")) {
+    await sqlExec(`ALTER TABLE tickets ADD COLUMN tag_ids TEXT`);
+  }
+}
+
+// Adds the optional display_name column lazily so SQLite deployments
+// installed before this feature pick it up on next boot. Idempotent.
+async function ensureDisplayNameColumn(): Promise<void> {
+  const { rows } = await sqlQuery<{ name: string }>(`PRAGMA table_info(users)`);
+  const have = new Set(rows.map((r) => r.name));
+  if (!have.has("display_name")) {
+    await sqlExec(`ALTER TABLE users ADD COLUMN display_name TEXT`);
+  }
 }
 
 // Adds the per-user Asana PAT column lazily so SQLite deployments

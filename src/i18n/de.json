@@ -150,10 +150,39 @@
   "tickets": {
     "createdAgo": "Erstellt {{age}}"
   },
+  "tags": {
+    "picker": {
+      "placeholder": "Tags hinzufügen…",
+      "create": "\"{{name}}\" erstellen"
+    }
+  },
+  "sprint": {
+    "filter": {
+      "title": "Tickets nach Verantwortlichem filtern",
+      "all": "Alle Tickets",
+      "me": "Meine Tickets",
+      "emptyTitle": "Keine Tickets entsprechen diesem Filter",
+      "emptyDescription": "Im Sprint ist nichts entsprechend zugewiesen.",
+      "clear": "Filter zurücksetzen"
+    }
+  },
   "profile": {
     "title": "Ihr Profil",
     "subtitle": "Verwalten Sie Ihren Avatar — was andere Teammitglieder neben Ihrem Namen sehen.",
     "done": "Fertig",
+    "displayName": {
+      "title": "Anzeigename",
+      "hint": "Wird überall im Kanban angezeigt, wo Ihr Name erscheint. Leer lassen, um Ihre E-Mail zu verwenden.",
+      "placeholder": "Jane Doe",
+      "submit": "Speichern",
+      "submitting": "Speichern…",
+      "cancel": "Abbrechen",
+      "success": "Anzeigename aktualisiert.",
+      "errors": {
+        "tooLong": "Anzeigename darf höchstens {{max}} Zeichen haben.",
+        "generic": "Anzeigename konnte nicht aktualisiert werden."
+      }
+    },
     "avatar": {
       "upload": "Avatar hochladen",
       "replace": "Ersetzen",

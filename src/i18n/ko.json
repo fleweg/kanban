@@ -150,10 +150,39 @@
   "tickets": {
     "createdAgo": "{{age}} 생성됨"
   },
+  "tags": {
+    "picker": {
+      "placeholder": "태그 추가…",
+      "create": "\"{{name}}\" 만들기"
+    }
+  },
+  "sprint": {
+    "filter": {
+      "title": "담당자별 티켓 필터",
+      "all": "모든 티켓",
+      "me": "내 티켓",
+      "emptyTitle": "이 필터에 일치하는 티켓이 없습니다",
+      "emptyDescription": "이 스프린트에 해당 방식으로 할당된 항목이 없습니다.",
+      "clear": "필터 지우기"
+    }
+  },
   "profile": {
     "title": "내 프로필",
     "subtitle": "아바타를 관리하세요 — 다른 팀원이 이름 옆에서 보는 이미지입니다.",
     "done": "완료",
+    "displayName": {
+      "title": "표시 이름",
+      "hint": "Kanban에서 이름이 표시되는 모든 곳에서 사용됩니다. 비워두면 이메일이 사용됩니다.",
+      "placeholder": "Jane Doe",
+      "submit": "저장",
+      "submitting": "저장 중…",
+      "cancel": "취소",
+      "success": "표시 이름이 업데이트되었습니다.",
+      "errors": {
+        "tooLong": "표시 이름은 최대 {{max}}자여야 합니다.",
+        "generic": "표시 이름을 업데이트할 수 없습니다."
+      }
+    },
     "avatar": {
       "upload": "아바타 업로드",
       "replace": "교체",

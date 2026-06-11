@@ -2,7 +2,7 @@ import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction
 import { ExternalLink, Link2, Loader2, RefreshCw, Trash2, Unlink } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { RichTextEditor } from "../ui/RichTextEditor";
-import { autoProgressForStatus, checklistProgress, cn, PRIORITIES, formatDateTime } from "../../lib/utils";
+import { autoProgressForStatus, checklistProgress, cn, displayNameOf, PRIORITIES, formatDateTime } from "../../lib/utils";
 import { createTicket, deleteTicket, moveTicketToTeam, updateTicket } from "../../services/tickets";
 import { useAppData } from "../../context/AppDataContext";
 import { useAuth } from "../../context/AuthContext";
@@ -19,6 +19,7 @@ import { TypeIcon } from "../issueTypes/TypeIcon";
 import { TypePicker } from "../issueTypes/TypePicker";
 import { EpicPicker } from "../epics/EpicPicker";
 import { DependenciesPicker } from "./DependenciesPicker";
+import { TagPicker } from "../tags/TagPicker";
 import { Checklist } from "./Checklist";
 import { Attachments } from "./Attachments";
 import { DEFAULT_ISSUE_TYPE, EPIC_TYPE } from "../../lib/issueTypes";
@@ -46,6 +47,7 @@ interface TicketFormState {
   dueDate: string;
   progress: number;
   dependencies: string[];
+  tagIds: string[];
   asanaGid: string | null;
   asanaPermalinkUrl: string | null;
 }
@@ -63,6 +65,7 @@ const blank: TicketFormState = {
   dueDate: "",
   progress: 0,
   dependencies: [],
+  tagIds: [],
   asanaGid: null,
   asanaPermalinkUrl: null,
 };
@@ -153,6 +156,7 @@ export function TicketModal({
         dueDate: msToDateInput(ticket.dueDate),
         progress: ticket.progress ?? 0,
         dependencies: Array.isArray(ticket.dependencies) ? [...ticket.dependencies] : [],
+        tagIds: Array.isArray(ticket.tagIds) ? [...ticket.tagIds] : [],
         asanaGid: ticket.asanaGid ?? null,
         asanaPermalinkUrl: ticket.asanaPermalinkUrl ?? null,
       });
@@ -253,6 +257,7 @@ export function TicketModal({
           startDate: startMs,
           dueDate: dueMs,
           dependencies: isEpicForm ? [] : newDeps,
+          tagIds: form.tagIds,
           asanaGid: form.asanaGid,
           asanaPermalinkUrl: form.asanaPermalinkUrl,
           ...(finalProgress !== undefined ? { progress: finalProgress } : {}),
@@ -330,6 +335,7 @@ export function TicketModal({
           dueDate: dueMs,
           progress: isEpicForm ? 0 : createAutoProg ?? clampProgress(form.progress),
           dependencies: newDeps,
+          tagIds: form.tagIds,
           asanaGid: form.asanaGid,
           asanaPermalinkUrl: form.asanaPermalinkUrl,
         });
@@ -919,6 +925,17 @@ function PropertiesPane({ form, setForm, isEpicForm, showStatusField, workflow, 
           </div>
         </>
       )}
+
+      {/* Tags are global metadata — applies to epics too (an epic
+          can be tagged by area / theme / quarter just like a normal
+          ticket). Lives outside the !isEpicForm gate. */}
+      <div className="sm:col-span-2">
+        <span className="label">Tags</span>
+        <TagPicker
+          value={form.tagIds}
+          onChange={(next) => setForm((f) => ({ ...f, tagIds: next }))}
+        />
+      </div>
     </div>
   );
 }
@@ -937,7 +954,7 @@ function CreatedBySubtitle({ creator, ticket }: CreatedBySubtitleProps) {
       <span>
         {creator ? (
           <>
-            Created by <span className="text-surface-700 dark:text-surface-200">{creator.email}</span>
+            Created by <span className="text-surface-700 dark:text-surface-200">{displayNameOf(creator)}</span>
           </>
         ) : (
           <>Created</>

@@ -1,11 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { BarChart3, Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Users, UsersRound, type LucideIcon } from "lucide-react";
+import { BarChart3, Crown, Inbox, LayoutGrid, Layers, LogOut, Moon, Settings, Sun, Tag, Users, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useAppData } from "../../context/AppDataContext";
 import { useProfileModal } from "../../context/ProfileModalContext";
 import { useTheme } from "../../context/ThemeContext";
 import { signOut } from "../../services/auth";
+import { displayNameOf } from "../../lib/utils";
 import { TeamSwitcher } from "../teams/TeamSwitcher";
 import { UserAvatar } from "../users/UserAvatar";
 
@@ -22,6 +23,7 @@ const baseItems: NavItem[] = [
   { to: "/epics", label: "Epics", icon: Crown },
   { to: "/gantt", label: "Gantt", icon: BarChart3 },
   { to: "/teams", label: "Teams", icon: UsersRound },
+  { to: "/tags", label: "Tags", icon: Tag },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -91,7 +93,12 @@ export function Sidebar() {
               size="md"
             />
             <div className="min-w-0">
-              <p className="text-xs font-medium text-surface-700 truncate dark:text-surface-200">{user.email}</p>
+              <p
+                className="text-xs font-medium text-surface-700 truncate dark:text-surface-200"
+                title={user.email ?? undefined}
+              >
+                {displayNameOf(liveRecord) || user.email}
+              </p>
               <p className="text-[11px] text-surface-400 dark:text-surface-500">{isAdmin ? "Administrator" : "Member"}</p>
             </div>
           </button>

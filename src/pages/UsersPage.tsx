@@ -27,7 +27,7 @@ import {
 import { Modal } from "../components/ui/Modal";
 import { useAppData } from "../context/AppDataContext";
 import { GENERAL_TEAM_ID, getTeamColorClasses } from "../lib/teams";
-import { cn } from "../lib/utils";
+import { cn, displayNameOf } from "../lib/utils";
 import { sendResetEmail, describeAuthError } from "../services/auth";
 import { getAdminEmail } from "../services/firebaseClient";
 import { getBackendKind } from "../lib/runtimeConfig";
@@ -143,7 +143,15 @@ export function UsersPage() {
                     <UserAvatar user={u} size="md" />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-surface-900 truncate dark:text-surface-50">{u.email}</span>
+                        <span
+                          className="text-sm font-medium text-surface-900 truncate dark:text-surface-50"
+                          title={u.email}
+                        >
+                          {displayNameOf(u)}
+                        </span>
+                        {u.displayName && (
+                          <span className="text-[11px] text-surface-500 dark:text-surface-400">{u.email}</span>
+                        )}
                         <span
                           className={
                             "chip " +
@@ -390,7 +398,7 @@ function TeamsEditorModal({ user, allTeams, onClose, onSave }: TeamsEditorModalP
     <Modal
       open
       onClose={onClose}
-      title={`Teams for ${user.email}`}
+      title={`Teams for ${displayNameOf(user)}`}
       description="The General team is always included."
       footer={
         <>

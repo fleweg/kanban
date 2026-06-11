@@ -32,6 +32,7 @@ interface TicketRow {
   due_date: number | null;
   progress: number | null;
   dependencies: string | null;
+  tag_ids: string | null;
   checklist: string | null;
   attachments: string | null;
   comment_count: number;
@@ -69,6 +70,7 @@ function rowToTicket(r: TicketRow): Ticket {
     dueDate: r.due_date,
     progress: r.progress ?? 0,
     dependencies: parseJsonArray<string>(r.dependencies),
+    tagIds: parseJsonArray<string>(r.tag_ids),
     checklist: parseJsonArray<ChecklistItem>(r.checklist),
     attachments: parseJsonArray<Attachment>(r.attachments),
     commentCount: r.comment_count ?? 0,
@@ -116,6 +118,7 @@ export interface CreateTicketInput {
   dueDate?: number | null;
   progress?: number;
   dependencies?: string[];
+  tagIds?: string[];
   asanaGid?: string | null;
   asanaPermalinkUrl?: string | null;
 }
@@ -135,6 +138,7 @@ export async function createTicket({
   dueDate = null,
   progress = 0,
   dependencies = [],
+  tagIds = [],
   asanaGid = null,
   asanaPermalinkUrl = null,
 }: CreateTicketInput): Promise<{ id: string }> {
@@ -146,10 +150,10 @@ export async function createTicket({
       id, title, description, priority, type,
       sprint_id, status, epic_id, team_id,
       created_by, assignee_id, "order",
-      start_date, due_date, progress, dependencies,
+      start_date, due_date, progress, dependencies, tag_ids,
       asana_gid, asana_permalink_url,
       comment_count, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
     [
       id,
       title.trim(),
@@ -169,6 +173,7 @@ export async function createTicket({
       Array.isArray(dependencies) && dependencies.length > 0
         ? JSON.stringify(dependencies)
         : null,
+      Array.isArray(tagIds) && tagIds.length > 0 ? JSON.stringify(tagIds) : null,
       asanaGid,
       asanaPermalinkUrl,
       now, // created_at
@@ -216,6 +221,7 @@ export type UpdateTicketInput = Partial<
     | "dueDate"
     | "progress"
     | "dependencies"
+    | "tagIds"
     | "asanaGid"
     | "asanaPermalinkUrl"
   >
@@ -236,12 +242,13 @@ const COLUMN_BY_FIELD: Record<keyof UpdateTicketInput, string> = {
   dueDate: "due_date",
   progress: "progress",
   dependencies: "dependencies",
+  tagIds: "tag_ids",
   asanaGid: "asana_gid",
   asanaPermalinkUrl: "asana_permalink_url",
 };
 
 // Fields whose value is stored as a JSON-encoded string in SQLite.
-const JSON_FIELDS = new Set<keyof UpdateTicketInput>(["dependencies"]);
+const JSON_FIELDS = new Set<keyof UpdateTicketInput>(["dependencies", "tagIds"]);
 
 export async function updateTicket(id: string, data: UpdateTicketInput): Promise<void> {
   const sets: string[] = [];

@@ -8,7 +8,14 @@
       "Bash(gcloud auth *)",
       "Bash(npm i *)",
       "Edit(/.claude/skills/create-mr/**)",
-      "WebFetch(domain:docs.svar.dev)"
+      "WebFetch(domain:docs.svar.dev)",
+      "Edit(/.claude/skills/kanban/**)",
+      "WebFetch(domain:developers.asana.com)",
+      "Bash(git check-ignore *)",
+      "Bash(awk '$1 == \"??\" {print $2}')"
+    ],
+    "additionalDirectories": [
+      "/Users/fredleaux/Sites/flexweg/kanban/.claude/skills"
     ]
   }
 }

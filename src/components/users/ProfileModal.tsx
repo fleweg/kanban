@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Camera, Eye, EyeOff, KeyRound, Loader2, Plug, Trash2 } from "lucide-react";
+import { Camera, Eye, EyeOff, IdCard, KeyRound, Loader2, Plug, Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { UserAvatar } from "./UserAvatar";
 import { useAuth } from "../../context/AuthContext";
@@ -10,7 +10,7 @@ import { MAX_AVATAR_INPUT_BYTES } from "../../lib/imageResize";
 import { getBackendKind } from "../../lib/runtimeConfig";
 import { changePassword } from "../../services/flexweg-sqlite/userAuth";
 import { SqliteApiError } from "../../services/flexweg-sqlite/client";
-import { setSelfAsanaToken } from "../../services/users";
+import { setSelfAsanaToken, setSelfDisplayName } from "../../services/users";
 import {
   AsanaApiError,
   getMe,
@@ -126,6 +126,8 @@ export function ProfileModal({ open, onClose }: ProfileModalProps) {
       }
     >
       <div className="flex flex-col items-center gap-4 py-2">
+        <DisplayNameSection currentRecord={displayRecord} />
+
         <div className="relative">
           <UserAvatar user={displayRecord} size="2xl" />
           {working && (
@@ -623,5 +625,120 @@ function AsanaTokenSection({ currentRecord }: { currentRecord: UserRecord }) {
         </div>
       </form>
     </div>
+  );
+}
+
+// Optional human-readable name shown wherever the user surfaces in
+// the UI (assignee picker, comment authorship, avatars' tooltip,
+// identity chip). Clearing it falls back to the email.
+//
+// Saving routes through the dispatcher: SQLite mode hits the Auth
+// API + updates the local cache; Firebase mode does a setDoc(merge:
+// true) so it also works on the bootstrap admin's first save when
+// the users/{uid} doc doesn't exist yet.
+const DISPLAY_NAME_MAX = 50;
+
+function DisplayNameSection({ currentRecord }: { currentRecord: UserRecord }) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(currentRecord.displayName ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  // Keep the input synced with the live record so any external
+  // update (admin overwrite, /auth/me re-sync) propagates.
+  useEffect(() => {
+    setDraft(currentRecord.displayName ?? "");
+  }, [currentRecord.displayName]);
+
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(false), 4000);
+    return () => clearTimeout(timer);
+  }, [success]);
+
+  const persisted = currentRecord.displayName ?? "";
+  const trimmed = draft.trim();
+  const dirty = trimmed !== persisted.trim();
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+    if (trimmed.length > DISPLAY_NAME_MAX) {
+      setError(t("profile.displayName.errors.tooLong", { max: DISPLAY_NAME_MAX }));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await setSelfDisplayName(currentRecord.id, trimmed || null);
+      setSuccess(true);
+    } catch (err) {
+      setError((err as Error).message || t("profile.displayName.errors.generic"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleReset() {
+    setDraft(persisted);
+    setError(null);
+    setSuccess(false);
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="w-full" autoComplete="off">
+      <div className="flex items-center gap-2 mb-2">
+        <IdCard className="h-4 w-4 text-surface-500 dark:text-surface-400" />
+        <h3 className="text-sm font-semibold">{t("profile.displayName.title")}</h3>
+      </div>
+      <p className="text-[11px] text-surface-500 mb-2 dark:text-surface-400">
+        {t("profile.displayName.hint")}
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          className="input flex-1"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            if (error) setError(null);
+            if (success) setSuccess(false);
+          }}
+          placeholder={t("profile.displayName.placeholder")}
+          maxLength={DISPLAY_NAME_MAX + 10}
+          disabled={submitting}
+        />
+        {dirty && (
+          <button
+            type="button"
+            className="btn-ghost text-xs"
+            onClick={handleReset}
+            disabled={submitting}
+          >
+            {t("profile.displayName.cancel")}
+          </button>
+        )}
+        <button type="submit" className="btn-primary text-xs" disabled={submitting || !dirty}>
+          {submitting ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {t("profile.displayName.submitting")}
+            </>
+          ) : (
+            t("profile.displayName.submit")
+          )}
+        </button>
+      </div>
+      {error && (
+        <div className="mt-2 rounded-lg bg-red-50 text-red-700 ring-1 ring-red-200 px-3 py-2 text-xs dark:bg-red-900/30 dark:text-red-300 dark:ring-red-700/50">
+          {error}
+        </div>
+      )}
+      {success && !error && (
+        <div className="mt-2 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-3 py-2 text-xs dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-700/50">
+          {t("profile.displayName.success")}
+        </div>
+      )}
+    </form>
   );
 }

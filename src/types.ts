@@ -60,6 +60,12 @@ export interface Ticket {
   // helper in lib/dependencies.ts shifts this ticket's startDate +
   // dueDate to preserve duration. Cycles are refused at insertion.
   dependencies?: string[];
+  // Free-form tags. Stored as an array of tag ids that reference the
+  // `tags` collection (Firebase) / `tags` table (SQLite). Tags are
+  // global (not team-scoped) so the same vocabulary can be reused
+  // across projects. Deleting a tag cascades a strip from every
+  // ticket's `tagIds` (see services/tags.deleteTag).
+  tagIds?: string[];
   order?: number;
   checklist?: ChecklistItem[];
   attachments?: Attachment[];
@@ -94,6 +100,18 @@ export interface Team {
   name: string;
   color?: string;
   createdAt?: Timestamp;
+}
+
+// Lightweight categorisation primitive. Many-to-many with tickets via
+// `Ticket.tagIds`. Color is a free-choice hex string (UI offers a
+// native `<input type="color">`). Global, not team-scoped — a small
+// vocabulary tends to be reused across projects.
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  createdAt?: Timestamp;
+  createdBy?: string | null;
 }
 
 export interface WorkflowColumn {
@@ -143,6 +161,13 @@ export interface UserRecord {
   // through the Profile modal; only displayed when the connector is
   // enabled globally.
   asanaAccessToken?: string | null;
+  // Optional human-readable name. Captured at registration time on the
+  // SQLite identity page and editable from the Profile modal. When set,
+  // it's preferred over the email everywhere the user surfaces in the
+  // UI (assignee picker, comment authorship, avatars' tooltip / initials,
+  // identity chip in the Topbar/Sidebar). When absent, the email is the
+  // fallback — see `displayNameOf` in lib/utils.
+  displayName?: string | null;
   createdAt?: Timestamp;
   createdBy?: string;
 }

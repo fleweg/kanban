@@ -6,7 +6,13 @@ import { useAppData } from "../../context/AppDataContext";
 import { UnassignedAvatar, UserAvatar } from "../users/UserAvatar";
 import { TypeIcon } from "../issueTypes/TypeIcon";
 import { EpicChip } from "../epics/EpicChip";
+import { TagChip } from "../tags/TagChip";
 import type { Ticket } from "../../types";
+
+// Visual cap on the number of tag chips rendered on a card. Anything
+// past this is collapsed into a "+N" indicator so a heavily-tagged
+// ticket doesn't push everything else off the row.
+const TAG_CHIP_LIMIT = 4;
 
 interface TicketCardProps {
   ticket: Ticket;
@@ -20,7 +26,16 @@ interface TicketCardProps {
 export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compact, onEpicClick }: TicketCardProps) {
   const { t } = useTranslation();
   const priority = getPriority(ticket.priority);
-  const { getUserById, getEpicById } = useAppData();
+  const { getUserById, getEpicById, getTagById } = useAppData();
+  // Resolve the ticket's tagIds to live Tag records — silently drop
+  // any orphaned id (admin-deleted tag whose cascade hadn't caught up
+  // yet, or stale local snapshot). Cap visually at TAG_CHIP_LIMIT and
+  // surface the remainder as a "+N" chip.
+  const resolvedTags = (ticket.tagIds ?? [])
+    .map((id) => getTagById(id))
+    .filter((tg): tg is NonNullable<typeof tg> => tg !== null);
+  const visibleTags = resolvedTags.slice(0, TAG_CHIP_LIMIT);
+  const hiddenTagsCount = resolvedTags.length - visibleTags.length;
   const assignee = getUserById(ticket.assigneeId);
   const epic = getEpicById(ticket.epicId);
   const commentCount = ticket.commentCount ?? 0;
@@ -91,6 +106,20 @@ export function TicketCard({ ticket, onClick, dragHandleProps, isDragging, compa
           )}
           <div className="mt-2.5 flex items-center gap-2 flex-wrap">
             <span className={cn("chip", priority.color)}>{priority.label}</span>
+            {visibleTags.map((tg) => (
+              <TagChip key={tg.id} tag={tg} size="xs" />
+            ))}
+            {hiddenTagsCount > 0 && (
+              <span
+                className="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-300"
+                title={resolvedTags
+                  .slice(TAG_CHIP_LIMIT)
+                  .map((tg) => tg.name)
+                  .join(", ")}
+              >
+                +{hiddenTagsCount}
+              </span>
+            )}
             {commentCount > 0 && (
               <span
                 className="inline-flex items-center gap-1 text-[11px] text-surface-500 dark:text-surface-400"

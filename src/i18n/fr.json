@@ -150,10 +150,39 @@
   "tickets": {
     "createdAgo": "Créé {{age}}"
   },
+  "tags": {
+    "picker": {
+      "placeholder": "Ajouter des tags…",
+      "create": "Créer \"{{name}}\""
+    }
+  },
+  "sprint": {
+    "filter": {
+      "title": "Filtrer les tickets par assigné",
+      "all": "Tous les tickets",
+      "me": "Mes tickets",
+      "emptyTitle": "Aucun ticket ne correspond à ce filtre",
+      "emptyDescription": "Rien d'assigné de cette manière dans ce sprint.",
+      "clear": "Effacer le filtre"
+    }
+  },
   "profile": {
     "title": "Votre profil",
     "subtitle": "Gérez votre avatar — ce que les autres membres voient à côté de votre nom.",
     "done": "Fermer",
+    "displayName": {
+      "title": "Nom d'affichage",
+      "hint": "Affiché partout où votre nom apparaît dans le Kanban. Laissez vide pour utiliser votre email.",
+      "placeholder": "Jane Doe",
+      "submit": "Enregistrer",
+      "submitting": "Enregistrement…",
+      "cancel": "Annuler",
+      "success": "Nom d'affichage mis à jour.",
+      "errors": {
+        "tooLong": "Le nom d'affichage doit faire au plus {{max}} caractères.",
+        "generic": "Impossible de mettre à jour le nom d'affichage."
+      }
+    },
     "avatar": {
       "upload": "Téléverser un avatar",
       "replace": "Remplacer",

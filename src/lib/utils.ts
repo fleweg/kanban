@@ -232,6 +232,41 @@ export function initialsFromEmail(email: string | null | undefined): string {
   return letters.toUpperCase();
 }
 
+// Returns the user's display name when set, otherwise their email.
+// Used at every UI surface that names a user — assignee picker options,
+// avatar tooltips, comment authorship, identity chip on the
+// Topbar/Sidebar. Accepts a partial shape so callers without a full
+// `UserRecord` (e.g. the raw FirebaseUser) can still call it.
+export function displayNameOf(
+  user: { displayName?: string | null; email?: string | null } | null | undefined,
+): string {
+  if (!user) return "";
+  const name = user.displayName?.trim();
+  if (name) return name;
+  return user.email?.trim() ?? "";
+}
+
+// Initials derivation that prefers a real name (split on whitespace,
+// take first letter of the first two tokens) and falls back to the
+// email logic when no name is available. "Jane Doe" → "JD",
+// "frederic" alone → "FR" (two first letters), no input → "?".
+export function initialsFor(
+  user: { displayName?: string | null; email?: string | null } | null | undefined,
+): string {
+  if (!user) return "?";
+  const name = user.displayName?.trim();
+  if (name) {
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    // Single token — take the first two letters so we never render
+    // just one initial (looks unbalanced inside the round avatar).
+    return name.slice(0, 2).toUpperCase();
+  }
+  return initialsFromEmail(user.email ?? null);
+}
+
 // Returns the auto-applied progress when a ticket's status changes.
 // - Moving into the workflow's completed column snaps progress to 100.
 // - Moving into the first column snaps progress to 0.

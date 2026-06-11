@@ -57,6 +57,7 @@ export interface CreateTicketInput {
   dueDate?: number | null;
   progress?: number;
   dependencies?: string[];
+  tagIds?: string[];
   asanaGid?: string | null;
   asanaPermalinkUrl?: string | null;
 }
@@ -76,6 +77,7 @@ export async function createTicket({
   dueDate = null,
   progress = 0,
   dependencies = [],
+  tagIds = [],
   asanaGid = null,
   asanaPermalinkUrl = null,
 }: CreateTicketInput) {
@@ -97,6 +99,7 @@ export async function createTicket({
     dueDate,
     progress,
     dependencies,
+    tagIds,
     asanaGid: asanaGid ?? null,
     asanaPermalinkUrl: asanaPermalinkUrl ?? null,
     // Initial order = now, so newly created tickets land at the top of their
@@ -136,6 +139,7 @@ export type UpdateTicketInput = Partial<
     | "dueDate"
     | "progress"
     | "dependencies"
+    | "tagIds"
     | "asanaGid"
     | "asanaPermalinkUrl"
   >

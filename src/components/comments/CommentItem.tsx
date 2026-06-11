@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { User as FirebaseUser } from "firebase/auth";
 import { CornerDownRight, Pencil, Reply, Trash2 } from "lucide-react";
 import { UserAvatar } from "../users/UserAvatar";
-import { formatRelativeTime, tokenizeForLinks } from "../../lib/utils";
+import { displayNameOf, formatRelativeTime, tokenizeForLinks } from "../../lib/utils";
 import { softDeleteComment, updateComment } from "../../services/comments";
 import type { TicketComment, UserRecord } from "../../types";
 
@@ -107,7 +107,7 @@ export function CommentItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 flex-wrap">
             <span className="text-xs font-medium text-surface-900 dark:text-surface-100">
-              {author?.email ?? "Unknown user"}
+              {displayNameOf(author) || "Unknown user"}
             </span>
             <span className="text-[11px] text-surface-400 dark:text-surface-500">
               {formatRelativeTime(comment.createdAt)}

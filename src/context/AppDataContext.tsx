@@ -12,13 +12,14 @@ import { useSprints } from "../hooks/useSprints";
 import { useWorkflow } from "../hooks/useWorkflow";
 import { useUsers } from "../hooks/useUsers";
 import { useTeams } from "../hooks/useTeams";
+import { useTags } from "../hooks/useTags";
 import { useAuth } from "./AuthContext";
 import { runTeamsBootMigration } from "../services/teams";
 import { ensureSchema } from "../services/flexweg-sqlite/schema";
 import { getBackendKind } from "../lib/runtimeConfig";
 import { EPIC_TYPE } from "../lib/issueTypes";
 import { GENERAL_TEAM_ID } from "../lib/teams";
-import type { Sprint, Team, Ticket, UserRecord, Workflow } from "../types";
+import type { Sprint, Tag, Team, Ticket, UserRecord, Workflow } from "../types";
 
 const CURRENT_TEAM_STORAGE_KEY = "kanbanCurrentTeam";
 
@@ -53,10 +54,12 @@ interface AppDataValue {
   workflow: Workflow;
   users: UserRecord[];
   teams: Team[];
+  tags: Tag[];
   epics: Ticket[];
   getUserById: (uid: string | null | undefined) => UserRecord | null;
   getEpicById: (id: string | null | undefined) => Ticket | null;
   getTeamById: (id: string | null | undefined) => Team | null;
+  getTagById: (id: string | null | undefined) => Tag | null;
   loading: boolean;
   error: Error | null;
 
@@ -83,6 +86,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const { workflow, loading: workflowLoading, error: workflowError } = useWorkflow();
   const { users, loading: usersLoading, error: usersError } = useUsers();
   const { teams, loading: teamsLoading, error: teamsError } = useTeams();
+  const { tags, loading: tagsLoading, error: tagsError } = useTags();
   const { record, isAdmin } = useAuth();
 
   // Fire the one-shot boot migration (Firebase only; SQLite handled it
@@ -133,6 +137,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const getTeamById = useCallback(
     (id: string | null | undefined): Team | null => (id ? teamsById.get(id) ?? null : null),
     [teamsById],
+  );
+
+  const tagsById = useMemo(() => {
+    const map = new Map<string, Tag>();
+    for (const tg of tags) map.set(tg.id, tg);
+    return map;
+  }, [tags]);
+
+  const getTagById = useCallback(
+    (id: string | null | undefined): Tag | null => (id ? tagsById.get(id) ?? null : null),
+    [tagsById],
   );
 
   const { epics, nonEpicTickets, epicsById } = useMemo(() => {
@@ -237,22 +252,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       workflow,
       users,
       teams,
+      tags,
       epics,
       getUserById,
       getEpicById,
       getTeamById,
+      getTagById,
       loading:
         ticketsLoading ||
         sprintsLoading ||
         workflowLoading ||
         usersLoading ||
-        teamsLoading,
+        teamsLoading ||
+        tagsLoading,
       error:
         ticketsError ||
         sprintsError ||
         workflowError ||
         usersError ||
-        teamsError,
+        teamsError ||
+        tagsError,
       currentTeamId,
       setCurrentTeamId,
       myTeams,
@@ -273,20 +292,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       workflow,
       users,
       teams,
+      tags,
       epics,
       getUserById,
       getEpicById,
       getTeamById,
+      getTagById,
       ticketsLoading,
       sprintsLoading,
       workflowLoading,
       usersLoading,
       teamsLoading,
+      tagsLoading,
       ticketsError,
       sprintsError,
       workflowError,
       usersError,
       teamsError,
+      tagsError,
       currentTeamId,
       setCurrentTeamId,
       myTeams,

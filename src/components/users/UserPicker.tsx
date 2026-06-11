@@ -1,4 +1,5 @@
 import { useAppData } from "../../context/AppDataContext";
+import { displayNameOf } from "../../lib/utils";
 
 interface UserPickerProps {
   value: string | null;
@@ -9,6 +10,7 @@ interface UserPickerProps {
 
 // A native <select> wrapping the active users list. `value` is a uid or null.
 // Renders a leading "Unassigned" option so the user can clear an assignment.
+// Labels use the user's display name when set, falling back to email.
 export function UserPicker({ value, onChange, includeUnassigned = true, disabled }: UserPickerProps) {
   const { users } = useAppData();
   const active = users.filter((u) => !u.disabled);
@@ -23,7 +25,7 @@ export function UserPicker({ value, onChange, includeUnassigned = true, disabled
       {includeUnassigned && <option value="">Unassigned</option>}
       {active.map((u) => (
         <option key={u.id} value={u.id}>
-          {u.email}
+          {displayNameOf(u)}
         </option>
       ))}
     </select>

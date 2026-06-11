@@ -150,10 +150,39 @@
   "tickets": {
     "createdAgo": "Aangemaakt {{age}}"
   },
+  "tags": {
+    "picker": {
+      "placeholder": "Tags toevoegen…",
+      "create": "\"{{name}}\" aanmaken"
+    }
+  },
+  "sprint": {
+    "filter": {
+      "title": "Tickets filteren op toegewezene",
+      "all": "Alle tickets",
+      "me": "Mijn tickets",
+      "emptyTitle": "Geen tickets komen overeen met dit filter",
+      "emptyDescription": "Niets op deze manier toegewezen in deze sprint.",
+      "clear": "Filter wissen"
+    }
+  },
   "profile": {
     "title": "Je profiel",
     "subtitle": "Beheer je avatar — wat andere teamleden naast je naam zien.",
     "done": "Klaar",
+    "displayName": {
+      "title": "Weergavenaam",
+      "hint": "Wordt overal getoond waar je naam in het Kanban verschijnt. Laat leeg om je e-mailadres te gebruiken.",
+      "placeholder": "Jane Doe",
+      "submit": "Opslaan",
+      "submitting": "Opslaan…",
+      "cancel": "Annuleren",
+      "success": "Weergavenaam bijgewerkt.",
+      "errors": {
+        "tooLong": "Weergavenaam moet maximaal {{max}} tekens hebben.",
+        "generic": "Kon weergavenaam niet bijwerken."
+      }
+    },
     "avatar": {
       "upload": "Avatar uploaden",
       "replace": "Vervangen",

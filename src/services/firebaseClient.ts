@@ -89,6 +89,7 @@ export const collections = {
   config: "config",
   users: "users",
   teams: "teams",
+  tags: "tags",
 } as const;
 
 export const configDocs = {

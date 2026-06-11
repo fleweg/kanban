@@ -257,10 +257,39 @@
   "tickets": {
     "createdAgo": "Created {{age}}"
   },
+  "tags": {
+    "picker": {
+      "placeholder": "Add tags…",
+      "create": "Create \"{{name}}\""
+    }
+  },
+  "sprint": {
+    "filter": {
+      "title": "Filter tickets by assignee",
+      "all": "All tickets",
+      "me": "My tickets",
+      "emptyTitle": "No tickets match this filter",
+      "emptyDescription": "Nothing assigned that way in this sprint.",
+      "clear": "Clear filter"
+    }
+  },
   "profile": {
     "title": "Your profile",
     "subtitle": "Manage your avatar — what other team members see next to your name.",
     "done": "Done",
+    "displayName": {
+      "title": "Display name",
+      "hint": "Shown wherever your name appears in the Kanban. Leave empty to use your email.",
+      "placeholder": "Jane Doe",
+      "submit": "Save",
+      "submitting": "Saving…",
+      "cancel": "Cancel",
+      "success": "Display name updated.",
+      "errors": {
+        "tooLong": "Display name must be at most {{max}} characters.",
+        "generic": "Could not update display name."
+      }
+    },
     "avatar": {
       "upload": "Upload avatar",
       "replace": "Replace",

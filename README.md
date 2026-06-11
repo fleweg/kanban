@@ -185,6 +185,16 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Tags vocabulary — read by every active member; create + update
+    // open to any active user (inline-create in the TagPicker keeps
+    // friction low, like Trello labels); delete restricted to admins
+    // (deletion cascades a strip across every ticket's `tagIds`).
+    match /tags/{id} {
+      allow read:           if isActiveUser();
+      allow create, update: if isActiveUser();
+      allow delete:         if isAdmin();
+    }
+
     // Workflow JSON is editable by every active member (Settings page).
     match /config/workflow { allow read, write: if isActiveUser(); }
     // One-shot migration flags (teams backfill). The first authenticated

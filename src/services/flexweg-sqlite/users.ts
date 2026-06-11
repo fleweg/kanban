@@ -22,6 +22,7 @@ import { Timestamp } from "firebase/firestore";
 import type { User as FirebaseUser } from "firebase/auth";
 import { sqlBatch, sqlExec, sqlQuery } from "./client";
 import { notifyPotentialChange, subscribeWithPolling } from "./subscriptions";
+import { ensureSchema } from "./schema";
 import {
   deleteUser as apiDeleteUser,
   fetchCurrentUser,
@@ -41,6 +42,7 @@ interface UserRow {
   email: string;
   role: string;
   disabled: number;
+  display_name: string | null;
   avatar_path: string | null;
   avatar_url: string | null;
   asana_access_token: string | null;
@@ -55,6 +57,7 @@ function rowToUser(r: UserRow, teamIds: string[]): UserRecord {
     role: r.role as UserRole,
     disabled: !!r.disabled,
     teamIds: teamIds.length > 0 ? teamIds : [GENERAL_TEAM_ID],
+    displayName: r.display_name,
     avatarPath: r.avatar_path,
     avatarUrl: r.avatar_url,
     asanaAccessToken: r.asana_access_token,
@@ -118,16 +121,41 @@ export async function getUserRecord(uid: string): Promise<UserRecord | null> {
 // in from a different device, the row is updated with the latest
 // email + role.
 export async function ensureSelfUserRecord(authUser: FirebaseUser): Promise<UserRecord> {
+  // Run the schema migration BEFORE the upsert. Each AppDataContext
+  // boot also runs ensureSchema, but that effect mounts AFTER auth —
+  // so on existing deployments installed before a new column was
+  // added (display_name, asana_access_token, …), the upsert would
+  // 400 with "no such column" because the migration hadn't fired
+  // yet at this point. Calling it inline here makes the function
+  // self-healing on first login.
+  // Idempotent: CREATE TABLE IF NOT EXISTS + ALTER ADD COLUMN guarded
+  // by PRAGMA table_info() reads, so re-running this on every login
+  // is cheap (~one batch + a few selects).
+  try {
+    await ensureSchema();
+  } catch (err) {
+    // Migration failure shouldn't block sign-in entirely — the user
+    // can still operate on whatever columns already exist. We log
+    // and continue so a transient SQL hiccup doesn't lock everyone out.
+    // eslint-disable-next-line no-console
+    console.warn("SQLite schema migration before user upsert failed:", err);
+  }
   // Fetch fresh role from /auth/me so the cache reflects any admin
   // change that happened between sessions. Best-effort — if the call
   // fails, fall back to a cached-only upsert.
   let role: UserRole = USER_ROLES.user;
   let disabled = false;
+  // displayName is sourced from the auth API only (it's the source of
+  // truth — admin can edit it via apiUpdateUser too). Null means
+  // "let the cache row keep its existing value" so the upsert
+  // doesn't clobber an admin-set name with a stale null.
+  let displayName: string | null | undefined;
   try {
     const me = await fetchCurrentUser();
     if (me) {
       role = me.role;
       disabled = me.disabled;
+      displayName = me.displayName;
     }
   } catch {
     // Network blip / partial outage. Use the existing cached row if any.
@@ -135,6 +163,7 @@ export async function ensureSelfUserRecord(authUser: FirebaseUser): Promise<User
     if (existing) {
       role = existing.role;
       disabled = existing.disabled;
+      displayName = existing.displayName;
     }
   }
 
@@ -143,15 +172,28 @@ export async function ensureSelfUserRecord(authUser: FirebaseUser): Promise<User
   // SQLite >= 3.24 ON CONFLICT — atomic upsert. We also auto-enroll
   // the user in the general team so they can be picked as an assignee
   // straight away even before an admin curates their memberships.
+  // COALESCE on display_name so the upsert PRESERVES an existing
+  // cache value when /auth/me returned null (offline / first call) —
+  // otherwise a re-login from a node that hasn't synced yet would
+  // wipe the locally-set display name.
   await sqlBatch([
     {
-      sql: `INSERT INTO users (uid, email, role, disabled, created_at, created_by)
-        VALUES (?, ?, ?, ?, ?, ?)
+      sql: `INSERT INTO users (uid, email, role, disabled, display_name, created_at, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(uid) DO UPDATE SET
           email = excluded.email,
           role = excluded.role,
-          disabled = excluded.disabled`,
-      params: [authUser.uid, email, role, disabled ? 1 : 0, now, authUser.uid],
+          disabled = excluded.disabled,
+          display_name = COALESCE(excluded.display_name, users.display_name)`,
+      params: [
+        authUser.uid,
+        email,
+        role,
+        disabled ? 1 : 0,
+        displayName ?? null,
+        now,
+        authUser.uid,
+      ],
     },
     {
       sql: `INSERT OR IGNORE INTO team_members (team_id, uid) VALUES (?, ?)`,
@@ -218,13 +260,22 @@ export async function syncUsersFromApi(): Promise<UserRecord[]> {
   for (const u of remote) {
     await sqlBatch([
       {
-        sql: `INSERT INTO users (uid, email, role, disabled, created_at, created_by)
-          VALUES (?, ?, ?, ?, ?, ?)
+        sql: `INSERT INTO users (uid, email, role, disabled, display_name, created_at, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(uid) DO UPDATE SET
             email = excluded.email,
             role = excluded.role,
-            disabled = excluded.disabled`,
-        params: [String(u.id), u.email.toLowerCase(), u.role, u.disabled ? 1 : 0, now, String(u.id)],
+            disabled = excluded.disabled,
+            display_name = COALESCE(excluded.display_name, users.display_name)`,
+        params: [
+          String(u.id),
+          u.email.toLowerCase(),
+          u.role,
+          u.disabled ? 1 : 0,
+          u.displayName ?? null,
+          now,
+          String(u.id),
+        ],
       },
       {
         sql: `INSERT OR IGNORE INTO team_members (team_id, uid) VALUES (?, ?)`,
@@ -271,6 +322,26 @@ export async function setSelfAsanaToken(
   const normalized = token && token.trim() ? token.trim() : null;
   await sqlExec(
     "UPDATE users SET asana_access_token = ? WHERE uid = ?",
+    [normalized, uid],
+  );
+  notifyPotentialChange();
+}
+
+// Self-set the human-readable display name. Source of truth is the
+// SQLite Auth API (so admins can override via apiUpdateUser too);
+// we mirror to the local users cache so the UI reflects the change
+// immediately without waiting for the next /auth/me round trip.
+//
+// Pass null/empty to clear — the UI then falls back to the email
+// via displayNameOf() in lib/utils.
+export async function setSelfDisplayName(
+  uid: string,
+  name: string | null,
+): Promise<void> {
+  const normalized = name && name.trim() ? name.trim() : null;
+  await apiUpdateUser(uidToApiId(uid), { displayName: normalized });
+  await sqlExec(
+    "UPDATE users SET display_name = ? WHERE uid = ?",
     [normalized, uid],
   );
   notifyPotentialChange();
