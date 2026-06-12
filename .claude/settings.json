@@ -15,10 +15,16 @@
       "Bash(awk '$1 == \"??\" {print $2}')",
       "Bash(git ls-tree *)",
       "Bash(npm outdated *)",
-      "Bash(npm update *)"
+      "Bash(npm update *)",
+      "Bash(/opt/homebrew/bin/node --version)",
+      "Read(//opt/homebrew/opt/**)",
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//opt/homebrew/Cellar/node/24.3.0/bin/**)",
+      "Bash(brew list *)"
     ],
     "additionalDirectories": [
-      "/Users/fredleaux/Sites/flexweg/kanban/.claude/skills"
+      "/Users/fredleaux/Sites/flexweg/kanban/.claude/skills",
+      "/Users/fredleaux"
     ]
   }
 }

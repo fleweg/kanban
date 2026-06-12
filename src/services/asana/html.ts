@@ -79,11 +79,129 @@ export function asanaToTipTap(html: string | null | undefined): string {
     .replace(/<i(\s[^>]*)?>/gi, "<em$1>")
     .replace(/<\/i>/gi, "</em>");
 
+  // Wrap top-level <img> elements so they sit inside a block. The
+  // TipTap Image extension is configured `inline: true`, which means
+  // the ProseMirror schema only allows images INSIDE block nodes
+  // (paragraphs, etc.). Asana's html_notes payloads place screenshots
+  // as direct siblings of <h2>/<p>/<ul> — i.e. at the document root,
+  // not inside a block.
+  //
+  // What happens without this wrap: setContent renders the images on
+  // initial parse (transient DOM), but ProseMirror's schema
+  // normalisation drops them from the document model. The next
+  // editor.getHTML() (which fires on Save through onUpdate) returns
+  // HTML without the images, and saving + reopening shows the user
+  // a description with no images until they Resync.
+  const wrapped = wrapTopLevelImages(normalised);
+
+  // Same family of issue for nested lists: Asana emits malformed HTML
+  // where a sub-list sits as a sibling of its conceptual parent <li>
+  // (sub-<ol>/<ul> is a direct child of <ol>/<ul>) instead of being
+  // nested inside it. ProseMirror's list schema rejects that and
+  // flattens the items, so saved + reopened tickets show the list
+  // "à plat" with no indentation. We move each malformed sub-list
+  // inside the preceding <li>.
+  const listsFixed = fixMalformedListNesting(wrapped);
+
   // Wrap loose inline content in a paragraph so TipTap doesn't choke.
   // Heuristic: if there's no block tag in the input, wrap the whole
   // thing in <p>…</p>.
-  const hasBlock = /<(p|h1|h2|h3|h4|ol|ul|blockquote|pre|hr|div)\b/i.test(normalised);
-  return hasBlock ? normalised : `<p>${normalised}</p>`;
+  const hasBlock = /<(p|h1|h2|h3|h4|ol|ul|blockquote|pre|hr|div)\b/i.test(listsFixed);
+  return hasBlock ? listsFixed : `<p>${listsFixed}</p>`;
+}
+
+// Rewrites Asana's malformed nested-list markup so ProseMirror's
+// schema keeps the hierarchy. Asana emits:
+//
+//   <ol>
+//     <li>Item 1</li>
+//     <ol>                <!-- sub-list as direct sibling, NOT inside li -->
+//       <li>Sub 1</li>
+//     </ol>
+//     <li>Item 2</li>
+//   </ol>
+//
+// We move each such sub-list inside the preceding <li>:
+//
+//   <ol>
+//     <li>Item 1
+//       <ol>
+//         <li>Sub 1</li>
+//       </ol>
+//     </li>
+//     <li>Item 2</li>
+//   </ol>
+//
+// When no preceding <li> exists (the malformed list is the first
+// child of its parent), we synthesise an empty <li> wrapper so the
+// schema stays valid.
+function fixMalformedListNesting(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+  if (!root) return html;
+  const fix = (el: Element): void => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "ul" || tag === "ol") {
+      // Snapshot direct children before mutating — the live HTMLCollection
+      // shifts as we move nodes out of it.
+      const directChildren = Array.from(el.children);
+      for (const child of directChildren) {
+        const childTag = child.tagName.toLowerCase();
+        if (childTag !== "ul" && childTag !== "ol") continue;
+        // Walk back to the nearest preceding <li> sibling. Asana
+        // occasionally inserts whitespace nodes or text snippets,
+        // but previousElementSibling skips those (text nodes aren't
+        // elements). We keep walking through non-li elements just in
+        // case (e.g. a <p> mistakenly placed between li and the
+        // nested list).
+        let prev = child.previousElementSibling;
+        while (prev && prev.tagName.toLowerCase() !== "li") {
+          prev = prev.previousElementSibling;
+        }
+        if (prev) {
+          prev.appendChild(child);
+        } else {
+          // No host li available — wrap the orphan in a fresh empty
+          // <li> so the parent list stays well-formed (every direct
+          // child of ul/ol is now an <li>).
+          const li = doc.createElement("li");
+          el.insertBefore(li, child);
+          li.appendChild(child);
+        }
+      }
+    }
+    // Recurse into every element child (including ones we just
+    // re-parented — they may themselves contain malformed lists).
+    for (const child of Array.from(el.children)) {
+      fix(child);
+    }
+  };
+  fix(root);
+  return root.innerHTML;
+}
+
+// Walks the input as DOM, wraps every <img> that's a direct child of
+// the synthetic root in its own <p>. Other locations (already inside
+// <p>, <li>, etc.) are left alone — wrapping a nested image would
+// produce invalid <p><p>img</p></p> markup.
+function wrapTopLevelImages(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const root = doc.body.firstElementChild;
+  if (!root) return html;
+  // Snapshot childNodes before mutating; the live NodeList moves under
+  // us when we insert <p> wrappers, which would otherwise skip
+  // siblings.
+  for (const child of Array.from(root.childNodes)) {
+    if (child.nodeType !== 1) continue;
+    const el = child as Element;
+    if (el.tagName.toLowerCase() !== "img") continue;
+    const p = doc.createElement("p");
+    el.parentNode?.insertBefore(p, el);
+    p.appendChild(el);
+  }
+  return root.innerHTML;
 }
 
 // Convert TipTap HTML output (paragraphs, headings, lists, marks,

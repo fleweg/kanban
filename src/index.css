@@ -1,8 +1,10 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind 4 ships a single import + an @config directive to keep the
+   existing v3-style tailwind.config.js (theme.extend.colors.surface,
+   keyframes, etc.) without rewriting it as @theme blocks. */
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 @layer base {
   :root {
@@ -25,42 +27,50 @@
   }
 }
 
-@layer components {
-  .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
-  }
+/* Tailwind 4: custom utilities that can themselves be @apply'd must
+   be registered with @utility (not @layer components). Variants like
+   `btn-primary` declare their full ruleset (no `@apply btn` chain —
+   v4 forbids @apply'ing a custom component class). The shared base is
+   inlined into each variant; a tiny bit of duplication for a cleaner
+   migration path. */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+}
 
-  .btn-primary {
-    @apply btn bg-surface-900 text-white hover:bg-surface-800 active:bg-surface-700 dark:bg-surface-100 dark:text-surface-900 dark:hover:bg-white;
-  }
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  @apply bg-surface-900 text-white hover:bg-surface-800 active:bg-surface-700 dark:bg-surface-100 dark:text-surface-900 dark:hover:bg-white;
+}
 
-  .btn-secondary {
-    @apply btn bg-white text-surface-700 ring-1 ring-inset ring-surface-200 hover:bg-surface-50 dark:bg-surface-800 dark:text-surface-200 dark:ring-surface-700 dark:hover:bg-surface-700;
-  }
+@utility btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  @apply bg-white text-surface-700 ring-1 ring-inset ring-surface-200 hover:bg-surface-50 dark:bg-surface-800 dark:text-surface-200 dark:ring-surface-700 dark:hover:bg-surface-700;
+}
 
-  .btn-ghost {
-    @apply btn text-surface-600 hover:bg-surface-100 hover:text-surface-900 dark:text-surface-300 dark:hover:bg-surface-800 dark:hover:text-surface-50;
-  }
+@utility btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  @apply text-surface-600 hover:bg-surface-100 hover:text-surface-900 dark:text-surface-300 dark:hover:bg-surface-800 dark:hover:text-surface-50;
+}
 
-  .btn-danger {
-    @apply btn bg-red-600 text-white hover:bg-red-500 active:bg-red-700;
-  }
+@utility btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  @apply bg-red-600 text-white hover:bg-red-500 active:bg-red-700;
+}
 
-  .input {
-    @apply w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-surface-900 ring-1 ring-inset ring-surface-200 placeholder:text-surface-400 focus:ring-2 focus:ring-inset focus:ring-blue-500 transition dark:bg-surface-800 dark:text-surface-100 dark:ring-surface-700 dark:placeholder:text-surface-500 dark:focus:ring-blue-400;
-  }
+@utility input {
+  @apply w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-surface-900 ring-1 ring-inset ring-surface-200 placeholder:text-surface-400 focus:ring-2 focus:ring-inset focus:ring-blue-500 transition dark:bg-surface-800 dark:text-surface-100 dark:ring-surface-700 dark:placeholder:text-surface-500 dark:focus:ring-blue-400;
+}
 
-  .label {
-    @apply block text-xs font-medium text-surface-600 mb-1.5 dark:text-surface-300;
-  }
+@utility label {
+  @apply block text-xs font-medium text-surface-600 mb-1.5 dark:text-surface-300;
+}
 
-  .card {
-    @apply rounded-xl bg-white shadow-card ring-1 ring-surface-200/60 dark:bg-surface-900 dark:ring-surface-700/60;
-  }
+@utility card {
+  @apply rounded-xl bg-white shadow-card ring-1 ring-surface-200/60 dark:bg-surface-900 dark:ring-surface-700/60;
+}
 
-  .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
-  }
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium;
 }
 
 /* TipTap-rendered content. Tailwind preflight strips defaults from h2/ul/pre
